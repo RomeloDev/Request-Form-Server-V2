@@ -17,6 +17,7 @@ class PositionSeeder extends Seeder
             'Accounting Clerk',
             'Branch Manager',
             'Auditor',
+            'Web Developer',
         ];
 
         foreach ($positions as $position) {

@@ -5,6 +5,7 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\API\V1\BranchController;
 use App\Http\Controllers\API\V1\PositionController;
 use App\Http\Controllers\API\V1\Auth\RegisterController;
+use App\Http\Controllers\API\V1\Auth\LoginController;
 
 Route::get('/user', function (Request $request) {
     return $request->user();
@@ -16,4 +17,5 @@ Route::prefix('v1')->middleware('throttle:60,1')->group(function () {
     Route::get('/view-branch', [BranchController::class,'viewBranch'])->name('view.branch');
     Route::get('/positions', [PositionController::class, 'index']);
     Route::post('/register', [RegisterController::class, 'register']);
+    Route::post('/login', [LoginController::class, 'login']);
 });
