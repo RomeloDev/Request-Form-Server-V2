@@ -6,16 +6,25 @@ use App\Http\Controllers\API\V1\BranchController;
 use App\Http\Controllers\API\V1\PositionController;
 use App\Http\Controllers\API\V1\Auth\RegisterController;
 use App\Http\Controllers\API\V1\Auth\LoginController;
+use App\Http\Controllers\API\V1\Auth\ProfileController;
 
 Route::get('/user', function (Request $request) {
     return $request->user();
 })->middleware('auth:sanctum');
 
 Route::prefix('v1')->middleware('throttle:60,1')->group(function () {
+    // Health check endpoint
     Route::get('/health', fn () => response()->json(['status' => 'ok']));
 
+    // Public endpoints
     Route::get('/view-branch', [BranchController::class,'viewBranch'])->name('view.branch');
     Route::get('/positions', [PositionController::class, 'index']);
     Route::post('/register', [RegisterController::class, 'register']);
     Route::post('/login', [LoginController::class, 'login']);
+
+    // Protected endpoints
+    Route::middleware('auth:sanctum')->group(function () {
+        Route::get('/profile', [ProfileController::class, 'show']);
+        Route::post('/logout', [LoginController::class, 'logout']);
+    });
 });
