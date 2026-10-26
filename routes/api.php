@@ -7,6 +7,8 @@ use App\Http\Controllers\API\V1\PositionController;
 use App\Http\Controllers\API\V1\Auth\RegisterController;
 use App\Http\Controllers\API\V1\Auth\LoginController;
 use App\Http\Controllers\API\V1\Auth\ProfileController;
+use App\Http\Controllers\API\V1\Admin\UserController;
+use App\Http\Controllers\API\V1\Admin\PositionController as AdminPositionController;
 
 Route::get('/user', function (Request $request) {
     return $request->user();
@@ -26,5 +28,16 @@ Route::prefix('v1')->middleware('throttle:60,1')->group(function () {
     Route::middleware('auth:sanctum')->group(function () {
         Route::get('/profile', [ProfileController::class, 'show']);
         Route::post('/logout', [LoginController::class, 'logout']);
+
+        // Admin-only endpoints
+        // User management endpoints
+        Route::get('/view-users', [UserController::class, 'index']);
+        Route::post('/verified-user/{id}', [UserController::class, 'verify']);
+        Route::delete('/delete-user/{id}', [UserController::class, 'destroy']);
+        Route::post('/update-profile/{user}', [UserController::class, 'update'])
+            ->missing(fn () => response()->json(['message' => 'User not found.'], 404));
+
+        // Position management endpoints
+        Route::post('/create-position', [AdminPositionController::class, 'store']);
     });
 });
