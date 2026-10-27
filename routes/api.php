@@ -47,7 +47,7 @@ Route::prefix('v1')->middleware('throttle:60,1')->group(function () {
 
         // Branch management endpoints
         Route::post('/add-branch', [AdminBranchController::class, 'store']);
-        Route::post('/update-branch/{branch}', [AdminBranchController::class, 'update'])
+        Route::put('/update-branch/{branch}', [AdminBranchController::class, 'update'])
             ->missing(
                 fn () => response()->json(['message' => 'Branch not found',], 404));
         Route::delete('/delete-branch/{branch}', [AdminBranchController::class,'destroy'])->missing(

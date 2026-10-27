@@ -43,7 +43,7 @@ X-XSRF-TOKEN: {{xsrfToken}}
 @branchId = 4
 
 ### Edit a KIA branch without changing its acronym
-POST {{host}}/api/v1/update-branch/{{branchId}}
+PUT {{host}}/api/v1/update-branch/{{branchId}}
 Accept: application/json
 Content-Type: application/json
 Origin: {{origin}}
