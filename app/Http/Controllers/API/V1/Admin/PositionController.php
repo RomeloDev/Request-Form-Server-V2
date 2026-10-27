@@ -74,7 +74,7 @@ class PositionController extends Controller
 
         if ($isAssigned) {
             return response()->json([
-                'message'=> 'This position is to users and cannot be deleted.',
+                'message'=> 'This position is assigned to users and cannot be deleted.',
             ], 409);
         }
 

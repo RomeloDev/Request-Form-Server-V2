@@ -9,6 +9,7 @@ use App\Http\Controllers\API\V1\Auth\LoginController;
 use App\Http\Controllers\API\V1\Auth\ProfileController;
 use App\Http\Controllers\API\V1\Admin\UserController;
 use App\Http\Controllers\API\V1\Admin\PositionController as AdminPositionController;
+use App\Http\Controllers\API\V1\Admin\BranchController as AdminBranchController;
 
 Route::get('/user', function (Request $request) {
     return $request->user();
@@ -43,5 +44,13 @@ Route::prefix('v1')->middleware('throttle:60,1')->group(function () {
             fn () => response()->json(['message'=> 'Position not found.'],404));
         Route::delete('/delete-position/{position}', [AdminPositionController::class,'destroy'])->missing(
             fn () => response()->json(['message'=> 'Position not found'],404));
+
+        // Branch management endpoints
+        Route::post('/add-branch', [AdminBranchController::class, 'store']);
+        Route::post('/update-branch/{branch}', [AdminBranchController::class, 'update'])
+            ->missing(
+                fn () => response()->json(['message' => 'Branch not found',], 404));
+        Route::delete('/delete-branch/{branch}', [AdminBranchController::class,'destroy'])->missing(
+            fn () => response()->json(['message'=> 'Branch not found'],404));
     });
 });

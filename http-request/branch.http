@@ -1,0 +1,63 @@
+@host = http://localhost:8000
+@origin = http://localhost:3001
+@xsrfToken = eyJpdiI6IjMzc0VOZ3hFS2FBTlc0WXB5YVBiMGc9PSIsInZhbHVlIjoiUk5RSXRSMTBYNjBjU2I1R0hSZ2FNYU9Hb0c3Z095UVVhaHljeWk4QnJKSVArL0c5aGlpK1UwaXAzcDRLMHpEdnh4Z2hZcGk5RE90cXJuRXkvQ25XMHlHRVhhNDNjb1ZEaS9hUkEyWHl1dE5LcnA2Q0FUNnR3dnUxQ0VaWStkbXgiLCJtYWMiOiI3NzRhNWUzNDk1MGFhMGM1MDdiOGY2ZGVjZjM1OGZmZjRkZWVkYzg3N2UwYTExOTNhMjRlOTdjNzU3YzUxZDMxIiwidGFnIjoiIn0=
+
+### 1. Start or refresh the CSRF session
+GET {{host}}/sanctum/csrf-cookie
+Accept: application/json
+Origin: {{origin}}
+
+### 2. Login with an existing verified local account
+# @prompt email Enter your local account email
+# @prompt password Enter your local account password
+POST {{host}}/api/v1/login
+Accept: application/json
+Content-Type: application/json
+Origin: {{origin}}
+X-XSRF-TOKEN: {{xsrfToken}}
+
+{
+  "email": "{{email}}",
+  "password": "{{password}}"
+}
+
+### 3. Confirm the login session
+GET {{host}}/api/v1/profile
+Accept: application/json
+Origin: {{origin}}
+
+### Create Branch API endpoint test
+POST {{host}}/api/v1/add-branch
+Accept: application/json
+Content-Type: application/json
+Origin: {{origin}}
+X-XSRF-TOKEN: {{xsrfToken}}
+
+{
+  "branch_code": "PRACTICE-001",
+  "branch_name": "practice branch",
+  "branch": "Honda Des, Inc."
+}
+
+### Edit branch
+@branchId = 4
+
+### Edit a KIA branch without changing its acronym
+POST {{host}}/api/v1/update-branch/{{branchId}}
+Accept: application/json
+Content-Type: application/json
+Origin: {{origin}}
+X-XSRF-TOKEN: {{xsrfToken}}
+
+{
+  "branch_code": "KIA-PRACTICE-001",
+  "branch_name": "updated practice branch",
+  "branch": "Strong Moto Centrum, Inc."
+}
+
+
+### Delete Branch
+DELETE {{host}}/api/v1/delete-branch/{{branchId}}
+Accept: application/json
+Origin: {{origin}}
+X-XSRF-TOKEN: {{xsrfToken}}
