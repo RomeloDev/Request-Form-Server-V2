@@ -16,7 +16,7 @@ class StorePositionRequest extends FormRequest
      */
     public function authorize(): bool
     {
-        return false;
+        return true;
     }
 
     /**
@@ -27,7 +27,13 @@ class StorePositionRequest extends FormRequest
     public function rules(): array
     {
         return [
-            "value" => ["required", "string", "max:255", Rule::unique('positions', 'value')],
+            "value" => [
+                "required",
+                "string",
+                "max:255",
+                Rule::unique('positions', 'value'),
+                Rule::unique('positions', 'label'),
+            ],
         ];
     }
 

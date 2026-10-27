@@ -30,7 +30,7 @@ Route::prefix('v1')->middleware('throttle:60,1')->group(function () {
         Route::post('/logout', [LoginController::class, 'logout']);
 
         // Admin-only endpoints
-        // User management endpoints
+        // User management endpoints (CRUD)
         Route::get('/view-users', [UserController::class, 'index']);
         Route::post('/verified-user/{id}', [UserController::class, 'verify']);
         Route::delete('/delete-user/{id}', [UserController::class, 'destroy']);
@@ -39,5 +39,9 @@ Route::prefix('v1')->middleware('throttle:60,1')->group(function () {
 
         // Position management endpoints
         Route::post('/create-position', [AdminPositionController::class, 'store']);
+        Route::put('/update-position/{position}', [AdminPositionController::class,'update'])->missing(
+            fn () => response()->json(['message'=> 'Position not found.'],404));
+        Route::delete('/delete-position/{position}', [AdminPositionController::class,'destroy'])->missing(
+            fn () => response()->json(['message'=> 'Position not found'],404));
     });
 });

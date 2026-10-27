@@ -1,0 +1,71 @@
+@host = http://localhost:8000
+@origin = http://localhost:3001
+@xsrfToken = eyJpdiI6IkRyTGlGVXVqUThJM1dJdzFvbjM4Vnc9PSIsInZhbHVlIjoiMDRVSDVrNlZXOFRHb0pvZ0R4TEE0ZmlsUG5LcGExKzhnVURJNVhlSW1qZkhCVWNCa1FxRmVtbDZ3eXlZMFhvalp0WlFnUE9uMjQ5b1Q3d3dkY0l2cm5XcEpvVFNJRG81Z0pQeUY0RVhTT0M4TnZmRFR5V01WSUpoNkdBWm1xS24iLCJtYWMiOiI1ZWVjNDkwMzBmNGM3OWM3ZjY0M2ZjMDNmYTRkNzliYzBiOGFhMmZiZTkxMDAxYWU3YzI5MmQ3NWVmZDczYmU3IiwidGFnIjoiIn0=
+@positionValue = Web Developer II
+
+### 1. Start or refresh the CSRF session
+GET {{host}}/sanctum/csrf-cookie
+Accept: application/json
+Origin: {{origin}}
+
+### 2. Login with an existing verified local account
+# @prompt email Enter your local account email
+# @prompt password Enter your local account password
+POST {{host}}/api/v1/login
+Accept: application/json
+Content-Type: application/json
+Origin: {{origin}}
+X-XSRF-TOKEN: {{xsrfToken}}
+
+{
+  "email": "{{email}}",
+  "password": "{{password}}"
+}
+
+### 3. Confirm the login session
+GET {{host}}/api/v1/profile
+Accept: application/json
+Origin: {{origin}}
+
+### 4. Create a position
+POST {{host}}/api/v1/create-position
+Accept: application/json
+Content-Type: application/json
+Origin: {{origin}}
+X-XSRF-TOKEN: {{xsrfToken}}
+
+{
+  "value": "{{positionValue}}"
+}
+
+### 5. Test missing value
+POST {{host}}/api/v1/create-position
+Accept: application/json
+Content-Type: application/json
+Origin: {{origin}}
+X-XSRF-TOKEN: {{xsrfToken}}
+
+{}
+
+### 6. View positions
+GET {{host}}/api/v1/positions
+Accept: application/json
+
+@positionId = 7
+
+### Rename a position
+PUT {{host}}/api/v1/update-position/{{positionId}}
+Accept: application/json
+Content-Type: application/json
+Origin: {{origin}}
+X-XSRF-TOKEN: {{xsrfToken}}
+
+{
+  "label": "Software Developer"
+}
+
+### Delete a position
+DELETE {{host}}/api/v1/delete-position/{{positionId}}
+Accept: application/json
+Origin: {{origin}}
+X-XSRF-TOKEN: {{xsrfToken}}
