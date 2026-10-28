@@ -10,6 +10,7 @@ use App\Http\Controllers\API\V1\Auth\ProfileController;
 use App\Http\Controllers\API\V1\Admin\UserController;
 use App\Http\Controllers\API\V1\Admin\PositionController as AdminPositionController;
 use App\Http\Controllers\API\V1\Admin\BranchController as AdminBranchController;
+use App\Http\Controllers\API\V1\Admin\ApproverController;
 
 Route::get('/user', function (Request $request) {
     return $request->user();
@@ -52,5 +53,12 @@ Route::prefix('v1')->middleware('throttle:60,1')->group(function () {
                 fn () => response()->json(['message' => 'Branch not found',], 404));
         Route::delete('/delete-branch/{branch}', [AdminBranchController::class,'destroy'])->missing(
             fn () => response()->json(['message'=> 'Branch not found'],404));
+
+        // Approvers Management endpoints
+        Route::get('/approvers', [ApproverController::class, 'index']);
+        Route::post('/approvers', [ApproverController::class, 'store']);
+        Route::delete('/approvers/{user}', [ApproverController::class, 'destroy'])->missing(
+            fn () => response()->json(['message'=> 'Approver not found.'],404));
+        Route::get('/approvers/candidates', [ApproverController::class,'candidates',]);
     });
 });
