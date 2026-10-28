@@ -29,7 +29,7 @@ class BranchController extends Controller
         $data = $request->validated();
 
         $branch = Branch::create([
-            'branch_code'=> $data['branch_code'],
+            'branch_code'=> strtoupper($data['branch_code']),
             'branch_name'=> strtoupper($data['branch_name']),
             'branch'=> $data['branch'],
             'acronym' => BranchAcronyms::resolve(
@@ -93,14 +93,14 @@ class BranchController extends Controller
 
         if ($isAssigned) {
             return response()->json([
-                'message' => 'This position is assigned to users and cannot be deleted.',
+                'message' => 'This branch is assigned to users and cannot be deleted.',
             ], 409);
         }
 
         $branch->delete();
 
         return response()->json([
-            'message'=> 'Branch deleted '. $branch->branch_code . ' deleted successfully.',
+            'message'=> 'Branch '. $branch->branch_code . ' deleted successfully.',
         ], 200);
     }
 }

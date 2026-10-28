@@ -1,6 +1,6 @@
 @host = http://localhost:8000
 @origin = http://localhost:3001
-@xsrfToken = eyJpdiI6IjMzc0VOZ3hFS2FBTlc0WXB5YVBiMGc9PSIsInZhbHVlIjoiUk5RSXRSMTBYNjBjU2I1R0hSZ2FNYU9Hb0c3Z095UVVhaHljeWk4QnJKSVArL0c5aGlpK1UwaXAzcDRLMHpEdnh4Z2hZcGk5RE90cXJuRXkvQ25XMHlHRVhhNDNjb1ZEaS9hUkEyWHl1dE5LcnA2Q0FUNnR3dnUxQ0VaWStkbXgiLCJtYWMiOiI3NzRhNWUzNDk1MGFhMGM1MDdiOGY2ZGVjZjM1OGZmZjRkZWVkYzg3N2UwYTExOTNhMjRlOTdjNzU3YzUxZDMxIiwidGFnIjoiIn0=
+@xsrfToken = eyJpdiI6IklKVUYrc0lZVGt3YmgrVyt5S2JCSFE9PSIsInZhbHVlIjoidFBjaWhTUml0Ryt4dnJhckcwT3VXaUFSbFArYnVpeDNwQUJUVUdpZjF5akpRUDhpbEpPemYxS1ZmT09FdWk0cStUSnducUFmREpUQlBubmJjSld3OVNudk9CcGp6eHFIT1JCUndrSFVzS2VEbEhyTnpuVzFDVWlCYXBKWmVlaXQiLCJtYWMiOiI2MWE3ODk3ZjIyMDdlNmRhY2M3MDQxNzhiZWUxYjc5ZTE5OGVhYmI0MGUyMjMyMjhjZmUwOTA4NDM2OTA3YTQ5IiwidGFnIjoiIn0=
 
 ### 1. Start or refresh the CSRF session
 GET {{host}}/sanctum/csrf-cookie
@@ -40,7 +40,7 @@ X-XSRF-TOKEN: {{xsrfToken}}
 }
 
 ### Edit branch
-@branchId = 4
+@branchId = 6
 
 ### Edit a KIA branch without changing its acronym
 PUT {{host}}/api/v1/update-branch/{{branchId}}

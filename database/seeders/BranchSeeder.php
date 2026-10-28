@@ -15,19 +15,85 @@ class BranchSeeder extends Seeder
     {
         $branches = [
             [
-                'branch_code' => 'LEARN-002',
-                'branch_name' => 'LEARNING BRANCH TWO',
-                'branch' => 'Strong Moto Centrum, Inc.',
-                'acronym' => 'SMCT',
+                'branch_code' => 'ALAD',
+                'branch_name' => 'ALANO',
+                'branch' => 'Des Appliance Plaza, Inc.',
+                'acronym' => 'DAP',
             ],
 
             // Add a second record using LEARN-003.
             [
-                'branch_code' => 'LEARN-003',
-                'branch_name' => 'LEARNING BRANCH THREE',
+                'branch_code' => 'SALA',
+                'branch_name' => 'ALANO',
                 'branch' => 'Strong Moto Centrum, Inc.',
                 'acronym' => 'SMCT',
-            ]
+            ],
+            [
+                'branch_code' => 'CALI',
+                'branch_name' => 'CALINAN',
+                'branch' => 'Strong Moto Centrum, Inc.',
+                'acronym' => 'SMCT',
+            ],
+            [
+                'branch_code' => 'SMCT',
+                'branch_name' => 'IPIL',
+                'branch' => 'Strong Moto Centrum, Inc.',
+                'acronym' => 'SMCT',
+            ],
+            [
+                'branch_code' => 'MALA',
+                'branch_name' => 'MALAYBALAY',
+                'branch' => 'Strong Moto Centrum, Inc.',
+                'acronym' => 'SMCT',
+            ],
+            [
+                'branch_code' => 'MOLS',
+                'branch_name' => 'MOLAVE',
+                'branch' => 'Strong Moto Centrum, Inc.',
+                'acronym' => 'SMCT',
+            ],
+            [
+                'branch_code' => 'SDIP',
+                'branch_name' => 'TURNO',
+                'branch' => 'Strong Moto Centrum, Inc.',
+                'acronym' => 'SMCT',
+            ],
+            [
+                'branch_code' => 'AKLA',
+                'branch_name' => 'AKLAN',
+                'branch' => 'Strong Moto Centrum, Inc.',
+                'acronym' => 'SMCT',
+            ],
+            [
+                'branch_code' => 'ALIC',
+                'branch_name' => 'ALICIA',
+                'branch' => 'Strong Moto Centrum, Inc.',
+                'acronym' => 'SMCT',
+            ],
+            [
+                'branch_code' => 'ALEN',
+                'branch_name' => 'ALLEN',
+                'branch' => 'Strong Moto Centrum, Inc.',
+                'acronym' => 'SMCT',
+            ],
+            [
+                'branch_code' => 'ANTIP',
+                'branch_name' => 'ANTIPOLO',
+                'branch' => 'Strong Moto Centrum, Inc.',
+                'acronym' => 'SMCT',
+            ],
+            [
+                'branch_code' => 'ANTI',
+                'branch_name' => 'ANTIQUE',
+                'branch' => 'Strong Moto Centrum, Inc.',
+                'acronym' => 'SMCT',
+            ],
+            [
+                'branch_code' => 'SARG',
+                'branch_name' => 'ARGAO',
+                'branch' => 'Strong Moto Centrum, Inc.',
+                'acronym' => 'SMCT',
+            ],
         ];
 
         foreach ($branches as $branch) {
