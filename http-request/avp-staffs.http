@@ -1,0 +1,43 @@
+@host = http://localhost:8000
+@origin = http://localhost:3001
+
+### List AVP Finance candidates
+GET {{host}}/api/v1/avp-staffs/avp-candidates?page=1&per_page=10
+Accept: application/json
+Origin: {{origin}}
+
+### Search AVP Finance candidates
+GET {{host}}/api/v1/avp-staffs/avp-candidates?search=Jane&page=1&per_page=10
+Accept: application/json
+Origin: {{origin}}
+
+### List staff candidates for an eligible AVP
+# Replace 8 with an ID returned by the AVP candidate endpoint.
+GET {{host}}/api/v1/avp-staffs/staff-candidates/8?page=1&per_page=10
+Accept: application/json
+Origin: {{origin}}
+
+### Search staff candidates
+GET {{host}}/api/v1/avp-staffs/staff-candidates/8?search=Alt&page=1&per_page=10
+Accept: application/json
+Origin: {{origin}}
+
+### List available AVP Staff branches
+GET {{host}}/api/v1/avp-staffs/available-branches?page=1&per_page=10
+Accept: application/json
+Origin: {{origin}}
+
+### Search available branches
+GET {{host}}/api/v1/avp-staffs/available-branches?search=CALI&sort=branch_code&direction=asc&page=1&per_page=10
+Accept: application/json
+Origin: {{origin}}
+
+### Invalid branch sort should return 422
+GET {{host}}/api/v1/avp-staffs/available-branches?sort=firstname
+Accept: application/json
+Origin: {{origin}}
+
+### Invalid page size should return 422
+GET {{host}}/api/v1/avp-staffs/available-branches?per_page=15
+Accept: application/json
+Origin: {{origin}}

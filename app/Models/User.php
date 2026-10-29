@@ -7,6 +7,8 @@ use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
@@ -30,5 +32,31 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
         ];
+    }
+
+    /**
+     * Assignments where this user is the official AVP Finance.
+     *
+     * One AVP may have multiple delegated staff members.
+     */
+    public function avpStaffAssignments(): HasMany
+    {
+        return $this->hasMany(
+            AvpStaffAssignment::class,
+            'avp_user_id'
+        );
+    }
+
+    /**
+     * Assignment where this user acts as delegated AVP staff.
+     *
+     * The database currently allows one assignment per staff user.
+     */
+    public function avpStaffAssignment(): HasOne
+    {
+        return $this->hasOne(
+            AvpStaffAssignment::class,
+            'staff_user_id'
+        );
     }
 }

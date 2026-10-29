@@ -46,7 +46,7 @@ return new class extends Migration
                 'employee_id',
                 'signature',
                 'role',
-                'profile_picture'
+                'profile_picture',
             ]);
         });
     }
