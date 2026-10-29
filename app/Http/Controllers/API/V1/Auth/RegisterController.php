@@ -7,10 +7,10 @@ use App\Http\Requests\Auth\RegisterRequest;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
 use RuntimeException;
 use Throwable;
-use Illuminate\Support\Facades\Hash;
 
 class RegisterController extends Controller
 {
@@ -30,7 +30,7 @@ class RegisterController extends Controller
             $result = DB::transaction(function () use ($data, $path) {
                 $user = User::create([
                     'name' => trim(
-                        $data['firstName'] . ' ' . $data['lastName']
+                        $data['firstName'].' '.$data['lastName']
                     ),
                     'firstName' => $data['firstName'],
                     'lastName' => $data['lastName'],
@@ -43,8 +43,9 @@ class RegisterController extends Controller
                     'userName' => $data['userName'],
                     'employee_id' => $data['employee_id'],
                     'signature' => $path,
-                    'role' => 'User',
                 ]);
+
+                $user->assignRole('User');
 
                 $token = $user->createToken(
                     'API TOKEN',

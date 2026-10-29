@@ -2,9 +2,9 @@
 
 namespace App\Http\Requests\Admin;
 
+use App\Models\User;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
-use App\Models\User;
 use Illuminate\Validation\Rule;
 
 class AssignApproversRequest extends FormRequest
@@ -14,7 +14,7 @@ class AssignApproversRequest extends FormRequest
      */
     public function authorize(): bool
     {
-        return $this->user()?->can("viewAny", User::class) ?? false;
+        return $this->user()?->can('viewAny', User::class) ?? false;
     }
 
     /**
@@ -24,7 +24,7 @@ class AssignApproversRequest extends FormRequest
      */
     public function rules(): array
     {
-       return [
+        return [
             'user_ids' => [
                 'required',
                 'array',
@@ -35,9 +35,7 @@ class AssignApproversRequest extends FormRequest
                 'required',
                 'integer',
                 'distinct',
-                Rule::exists('users', 'id')->where(
-                    fn ($query) => $query->where('role', 'User')
-                ),
+                Rule::exists('users', 'id'),
             ],
         ];
     }
@@ -45,16 +43,11 @@ class AssignApproversRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'user_ids.required' =>
-                'Select at least one user.',
-            'user_ids.min' =>
-                'Select at least one user.',
-            'user_ids.max' =>
-                'You may assign up to 50 users at a time.',
-            'user_ids.*.distinct' =>
-                'Each user may only be selected once.',
-            'user_ids.*.exists' =>
-                'Each selected account must exist and currently have the User role.',
+            'user_ids.required' => 'Select at least one user.',
+            'user_ids.min' => 'Select at least one user.',
+            'user_ids.max' => 'You may assign up to 50 users at a time.',
+            'user_ids.*.distinct' => 'Each user may only be selected once.',
+            'user_ids.*.exists' => 'Each selected account must exist.',
         ];
     }
 }

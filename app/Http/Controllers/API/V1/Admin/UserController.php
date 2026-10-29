@@ -3,12 +3,10 @@
 namespace App\Http\Controllers\API\V1\Admin;
 
 use App\Http\Controllers\Controller;
-use Exception;
-use Illuminate\Http\Request;
+use App\Http\Requests\Admin\UpdateUserRequest;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Gate;
-use App\Http\Requests\Admin\UpdateUserRequest;
 use Illuminate\Support\Facades\Storage;
 
 class UserController extends Controller
@@ -17,14 +15,13 @@ class UserController extends Controller
     {
         Gate::authorize('viewAny', User::class);
 
-        $users = User::where('role', '!=', 'Admin')->get([
+        $users = User::query()->withoutRole('Admin')->with('roles:id,name')->get([
             'id',
             'firstName as firstname',
             'lastName as lastname',
             'userName as username',
             'email',
             'employee_id',
-            'role',
             'position',
             'contact',
             'branch_code',
@@ -35,9 +32,18 @@ class UserController extends Controller
         ]);
 
         foreach ($users as $user) {
+            // Preserve the current frontend role string using Spatie.
+            $user->setAttribute(
+                'role',
+                $user->getRoleNames()->first()
+            );
+
+            // Avoid exposing Spatie's internal relationship structure.
+            $user->unsetRelation('roles');
+
             $user->verification_status = $user->email_verified_at
-            ? 'Verified'
-            : 'Not Verified';
+                ? 'Verified'
+                : 'Not Verified';
         }
 
         return response()->json([
@@ -66,7 +72,7 @@ class UserController extends Controller
         $user->save();
 
         return response()->json([
-            'message' => 'User ' . $user->firstName . ' verified successfully.',
+            'message' => 'User '.$user->firstName.' verified successfully.',
         ], 200);
     }
 
@@ -99,7 +105,7 @@ class UserController extends Controller
 
         $newPicture = null;
 
-        try{
+        try {
             $user->fill($data);
 
             // Missing optional fields become null, matching the reference code
@@ -108,7 +114,7 @@ class UserController extends Controller
 
             // keep the rebuild's full name field consistent
             $user->name = trim(
-                $user->firstName . ' ' . $user->lastName
+                $user->firstName.' '.$user->lastName
             );
 
             if ($request->filled('password')) {
@@ -128,7 +134,7 @@ class UserController extends Controller
             $user->save();
         } catch (\Throwable $exception) {
             if (is_string($newPicture)) {
-                try{
+                try {
                     Storage::disk('public')->delete($newPicture);
                 } catch (\Throwable $cleanupException) {
                     report($cleanupException);

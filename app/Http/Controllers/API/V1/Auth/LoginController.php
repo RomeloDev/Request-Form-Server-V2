@@ -70,7 +70,7 @@ class LoginController extends Controller
         return response()->json([
             'status' => true,
             'message' => 'Login successful. Redirecting you to Dashboard.',
-            'role' => $user->role,
+            'role' => $user->getRoleNames()->first(),
         ], 200);
     }
 

@@ -3,11 +3,11 @@
 namespace App\Http\Controllers\API\V1\Admin;
 
 use App\Http\Controllers\Controller;
-use App\Models\User;
-use Illuminate\Http\JsonResponse;
-use App\Http\Requests\Admin\ListApproversRequest;
-use Illuminate\Database\Eloquent\Builder;
 use App\Http\Requests\Admin\AssignApproversRequest;
+use App\Http\Requests\Admin\ListApproversRequest;
+use App\Models\User;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 
@@ -54,11 +54,11 @@ class ApproverController extends Controller
             'branch' => 'branch',
         ];
 
-        $query = User::query()
-            ->where('role', $role);
+        // role() is a query scope provided by Spatie's HasRoles trait.
+        $query = User::query()->role($role)->with('roles:id,name');
 
         if ($search !== '') {
-            $pattern = '%' . $search . '%';
+            $pattern = '%'.$search.'%';
 
             $query->where(
                 function (Builder $query) use ($pattern) {
@@ -86,7 +86,6 @@ class ApproverController extends Controller
                     'userName as username',
                     'email',
                     'employee_id',
-                    'role',
                     'position',
                     'contact',
                     'branch_code',
@@ -94,6 +93,21 @@ class ApproverController extends Controller
                     'email_verified_at',
                 ],
             );
+
+        $users->getCollection()->transform(
+            function (User $user): User {
+                // Preserve the current frontend response contract.
+                $user->setAttribute(
+                    'role',
+                    $user->getRoleNames()->first()
+                );
+
+                // Do not expose the entire roles relationship unnecessarily.
+                $user->unsetRelation('roles');
+
+                return $user;
+            }
+        );
 
         return response()->json([
             'message' => $message,
@@ -109,67 +123,91 @@ class ApproverController extends Controller
         ], 200);
     }
 
-    public function store(AssignApproversRequest $request): JsonResponse {
+    public function store(AssignApproversRequest $request): JsonResponse
+    {
         $userIds = $request->validated('user_ids');
 
-        return DB::transaction(
-            function () use ($userIds): JsonResponse {
-                $users = User::query()
-                    ->whereKey($userIds)
-                    ->lockForUpdate()
-                    ->get(['id', 'role']);
+        return DB::transaction(function () use ($userIds): JsonResponse {
+            /*
+            * Lock the selected user rows until the transaction finishes.
+            * This prevents two role-management requests from changing the
+            * same users at the same time.
+            */
+            $users = User::query()
+                ->whereKey($userIds)
+                ->lockForUpdate()
+                ->get();
 
-                $allEligible =
-                    $users->count() === count($userIds)
-                    && $users->every(
-                        fn (User $user) => $user->role === 'User'
-                    );
+            /*
+            * Load the Spatie roles only after obtaining the row locks.
+            * hasExactRoles() ensures "User" is the account's only role.
+            */
+            $users->load('roles');
 
-                if (!$allEligible) {
-                    return response()->json([
-                        'message' =>
-                            'One or more selected users are no longer eligible to become approvers.',
-                    ], 409);
-                }
+            $allEligible =
+                $users->count() === count($userIds)
+                && $users->every(
+                    fn (User $user): bool => $user->hasExactRoles('User')
+                );
 
-                User::query()
-                    ->whereKey($userIds)
-                    ->update([
-                        'role' => 'approver',
-                    ]);
-
-                $count = count($userIds);
-
+            if (! $allEligible) {
                 return response()->json([
-                    'message' => $count === 1
-                        ? 'Approver assigned successfully.'
-                        : $count . ' approvers assigned successfully.',
-                    'data' => [
-                        'updated_count' => $count,
-                    ],
-                ], 200);
+                    'message' => 'One or more selected users are no longer eligible to become approvers.',
+                ], 409);
             }
-        );
+
+            foreach ($users as $user) {
+                /*
+                * The application uses one role per user. syncRoles() removes
+                * the previous User role and assigns only the approver role.
+                */
+                $user->syncRoles('approver');
+            }
+
+            $count = $users->count();
+
+            return response()->json([
+                'message' => $count === 1
+                    ? 'Approver assigned successfully.'
+                    : "{$count} approvers assigned successfully.",
+                'data' => [
+                    'updated_count' => $count,
+                ],
+            ], 200);
+        });
     }
 
-    public function destroy(User $user): JsonResponse {
+    public function destroy(User $user): JsonResponse
+    {
         Gate::authorize('update', $user);
 
-        $updated = User::query()
-            ->whereKey($user->id)
-            ->where('role', 'approver')
-            ->update([
-                'role' => 'User'
-            ]);
+        return DB::transaction(function () use ($user): JsonResponse {
+            /*
+            * Reload and lock the user because the route-bound instance may
+            * contain state that changed after route model binding.
+            */
+            $lockedUser = User::query()
+                ->whereKey($user->id)
+                ->lockForUpdate()
+                ->firstOrFail();
 
-        if ($updated === 0) {
+            $lockedUser->load('roles');
+
+            if (! $lockedUser->hasExactRoles('approver')) {
+                return response()->json([
+                    'message' => 'The selected user is not currently an approver.',
+                ], 409);
+            }
+
+            /*
+            * Removing an approver does not delete the account.
+            * It replaces the approver role with the standard User role.
+            */
+            $lockedUser->syncRoles('User');
+
             return response()->json([
-                'message' => 'The selected user is not currently an approver.',
-            ], 409);
-        }
-
-        return response()->json([
-            'message' => 'Approver role removed successfully',
-        ], 200);
+                'message' => 'Approver role removed successfully.',
+            ], 200);
+        });
     }
 }
