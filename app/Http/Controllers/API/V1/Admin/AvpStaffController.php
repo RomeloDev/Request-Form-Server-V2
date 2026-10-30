@@ -3,12 +3,22 @@
 namespace App\Http\Controllers\API\V1\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Admin\DeleteAvpStaffAssignmentRequest;
 use App\Http\Requests\Admin\ListAvailableAvpBranchesRequest;
+use App\Http\Requests\Admin\ListAvpStaffAssignmentsRequest;
 use App\Http\Requests\Admin\ListAvpStaffCandidatesRequest;
+use App\Http\Requests\Admin\StoreAvpStaffAssignmentRequest;
+use App\Http\Requests\Admin\UpdateAvpStaffAssignmentRequest;
+use App\Http\Resources\AvpStaffAssignmentResource;
+use App\Http\Resources\AvpStaffBranchResource;
+use App\Http\Resources\AvpStaffCandidateResource;
+use App\Models\AvpStaffAssignment;
 use App\Models\Branch;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\DB;
 
 class AvpStaffController extends Controller
 {
@@ -125,17 +135,322 @@ class AvpStaffController extends Controller
                 ],
             );
 
+        return AvpStaffBranchResource::collection($branches)
+            ->additional([
+                'message' => 'Available AVP Staff branches retrieved successfully.',
+            ])
+            ->response();
+    }
+
+    /**
+     * List configured AVP Staff assignments.
+     */
+    public function index(ListAvpStaffAssignmentsRequest $request): JsonResponse
+    {
+        /*
+        * Only validated query parameters enter the database query.
+        */
+        $data = $request->validated();
+
+        $search = trim($data['search'] ?? '');
+        $sort = $data['sort'] ?? 'created_at';
+        $direction = $data['direction'] ?? 'desc';
+        $perPage = $data['per_page'] ?? 10;
+
+        /*
+        * Client sort names map to known database columns.
+        * We never pass an arbitrary client value to orderBy().
+        */
+        $sortColumns = [
+            'id' => 'id',
+            'created_at' => 'created_at',
+        ];
+
+        /*
+        * with() loads related AVP, staff, and branch records ahead
+        * of time so the Resource does not cause N+1 queries.
+        */
+        $query = AvpStaffAssignment::query()
+            ->with([
+                'avp:id,firstName,lastName,position',
+                'staff:id,firstName,lastName,position',
+                'branches:id,branch_code,branch_name,branch,acronym',
+            ]);
+
+        if ($search !== '') {
+            $pattern = '%'.$search.'%';
+
+            /*
+            * The outer where() groups all relationship searches:
+            *
+            * WHERE (
+            *     AVP matches
+            *     OR staff matches
+            *     OR branch matches
+            * )
+            */
+            $query->where(
+                function (Builder $query) use ($pattern): void {
+                    $query
+                        ->whereHas(
+                            'avp',
+                            function (Builder $query) use ($pattern): void {
+                                $query
+                                    ->where('firstName', 'like', $pattern)
+                                    ->orWhere('lastName', 'like', $pattern);
+                            }
+                        )
+                        ->orWhereHas(
+                            'staff',
+                            function (Builder $query) use ($pattern): void {
+                                $query
+                                    ->where('firstName', 'like', $pattern)
+                                    ->orWhere('lastName', 'like', $pattern)
+                                    ->orWhere('position', 'like', $pattern);
+                            }
+                        )
+                        ->orWhereHas(
+                            'branches',
+                            function (Builder $query) use ($pattern): void {
+                                $query
+                                    ->where('branch_code', 'like', $pattern)
+                                    ->orWhere('branch_name', 'like', $pattern)
+                                    ->orWhere('branch', 'like', $pattern)
+                                    ->orWhere('acronym', 'like', $pattern);
+                            }
+                        );
+                }
+            );
+        }
+
+        /*
+        * Filtering happens first, followed by sorting and pagination.
+        */
+        $assignments = $query
+            ->orderBy($sortColumns[$sort], $direction)
+            ->orderBy('id')
+            ->paginate(perPage: $perPage);
+
+        /*
+        * collection() runs the Resource once for every assignment.
+        * Because $assignments is a paginator, Laravel also generates
+        * pagination links and metadata.
+        */
+        return AvpStaffAssignmentResource::collection($assignments)
+            ->additional([
+                'message' => 'AVP Staff assignments retrieved successfully.',
+            ])
+            ->response();
+    }
+
+    /**
+     * Create an AVP Staff assignment and its branch routing.
+     */
+    public function store(StoreAvpStaffAssignmentRequest $request): JsonResponse
+    {
+        $data = $request->validated();
+
+        $userIds = [
+            $data['avp_user_id'],
+            $data['staff_user_id'],
+        ];
+        sort($userIds);
+
+        $branchIds = $data['branch_ids'];
+        sort($branchIds);
+
+        try {
+            return DB::transaction(function () use ($data, $userIds, $branchIds): JsonResponse {
+                $users = User::query()
+                    ->whereIn('id', $userIds)
+                    ->orderBy('id')
+                    ->lockForUpdate()
+                    ->get()
+                    ->keyBy('id');
+
+                $branches = Branch::query()
+                    ->whereIn('id', $branchIds)
+                    ->orderBy('id')
+                    ->lockForUpdate()
+                    ->get(['id']);
+
+                if ($users->count() !== count($userIds)) {
+                    abort(409, 'The selected AVP or staff member is no longer available.');
+                }
+
+                if ($branches->count() !== count($branchIds)) {
+                    abort(409, 'One or more selected branches are no longer available.');
+                }
+
+                $avp = $users->get($data['avp_user_id']);
+                $staff = $users->get($data['staff_user_id']);
+
+                if (! $avp->hasExactRoles('approver') || $avp->position !== 'AVP - Finance') {
+                    abort(409, 'The selected AVP is no longer eligible.');
+                }
+
+                if (! $staff->hasRole('approver') || $staff->position === 'AVP - Finance') {
+                    abort(409, 'The selected staff member is no longer eligible.');
+                }
+
+                if (AvpStaffAssignment::query()->where('staff_user_id', $staff->id)->exists()) {
+                    abort(409, 'The selected staff member is already assigned.');
+                }
+
+                if (DB::table('avp_staff_assignment_branch')->whereIn('branch_id', $branchIds)->exists()) {
+                    abort(409, 'One or more selected branches are already assigned.');
+                }
+
+                $assignment = AvpStaffAssignment::create([
+                    'avp_user_id' => $avp->id,
+                    'staff_user_id' => $staff->id,
+                ]);
+
+                $assignment->branches()->attach($branchIds);
+                $assignment->load($this->assignmentRelations());
+
+                return (new AvpStaffAssignmentResource($assignment))
+                    ->additional([
+                        'message' => 'AVP Staff assignment created successfully.',
+                    ])
+                    ->response()
+                    ->setStatusCode(201);
+            });
+        } catch (UniqueConstraintViolationException) {
+            return response()->json([
+                'message' => 'The selected staff member or branch is already assigned.',
+            ], 409);
+        }
+    }
+
+    /**
+     * Replace the branches routed through an AVP Staff assignment.
+     */
+    public function update(
+        UpdateAvpStaffAssignmentRequest $request,
+        AvpStaffAssignment $assignment
+    ): JsonResponse {
+        $data = $request->validated();
+
+        /*
+        * Stable ordering reduces deadlock risk when concurrent
+        * requests select overlapping branches.
+        */
+        $branchIds = $data['branch_ids'];
+        sort($branchIds);
+
+        try {
+            return DB::transaction(
+                function () use ($assignment, $branchIds): JsonResponse {
+                    /*
+                    * Route model binding loaded the assignment before the
+                    * transaction. Load it again with a database lock.
+                    */
+                    $lockedAssignment = AvpStaffAssignment::query()
+                        ->whereKey($assignment->getKey())
+                        ->lockForUpdate()
+                        ->first();
+
+                    if ($lockedAssignment === null) {
+                        abort(
+                            409,
+                            'The AVP Staff assignment is no longer available.'
+                        );
+                    }
+
+                    /*
+                    * Lock every selected branch before checking and syncing.
+                    */
+                    $branches = Branch::query()
+                        ->whereIn('id', $branchIds)
+                        ->orderBy('id')
+                        ->lockForUpdate()
+                        ->get(['id']);
+
+                    /*
+                    * A branch could disappear after Form Request validation.
+                    */
+                    if ($branches->count() !== count($branchIds)) {
+                        abort(
+                            409,
+                            'One or more selected branches are no longer available.'
+                        );
+                    }
+
+                    /*
+                    * Allow branches already owned by this assignment.
+                    * Reject only branches owned by a different assignment.
+                    */
+                    $hasBranchConflict = DB::table(
+                        'avp_staff_assignment_branch'
+                    )
+                        ->whereIn('branch_id', $branchIds)
+                        ->where(
+                            'avp_staff_assignment_id',
+                            '!=',
+                            $lockedAssignment->id
+                        )
+                        ->exists();
+
+                    if ($hasBranchConflict) {
+                        abort(
+                            409,
+                            'One or more selected branches belong to another assignment.'
+                        );
+                    }
+
+                    /*
+                    * Make the pivot table exactly match branchIds.
+                    */
+                    $lockedAssignment->branches()->sync($branchIds);
+
+                    /*
+                    * Reload the relationships required by the Resource.
+                    */
+                    $lockedAssignment->load($this->assignmentRelations());
+
+                    return (new AvpStaffAssignmentResource(
+                        $lockedAssignment
+                    ))
+                        ->additional([
+                            'message' => 'AVP Staff assignment updated successfully.',
+                        ])
+                        ->response();
+                }
+            );
+        } catch (UniqueConstraintViolationException) {
+            /*
+            * The database remains the final protection if another request
+            * claims a branch between our application checks.
+            */
+            return response()->json([
+                'message' => 'One or more selected branches are already assigned.',
+            ], 409);
+        }
+    }
+
+    /**
+     * Delete an assignment without deleting its users, roles, or branches.
+     */
+    public function destroy(
+        DeleteAvpStaffAssignmentRequest $request,
+        AvpStaffAssignment $assignment
+    ): JsonResponse {
+        DB::transaction(function () use ($assignment): void {
+            $lockedAssignment = AvpStaffAssignment::query()
+                ->whereKey($assignment->getKey())
+                ->lockForUpdate()
+                ->first();
+
+            if ($lockedAssignment === null) {
+                abort(409, 'The AVP Staff assignment is no longer available.');
+            }
+
+            $lockedAssignment->delete();
+        });
+
         return response()->json([
-            'message' => 'Available AVP Staff branches retrieved successfully.',
-            'data' => $branches->items(),
-            'meta' => [
-                'current_page' => $branches->currentPage(),
-                'per_page' => $branches->perPage(),
-                'total' => $branches->total(),
-                'last_page' => $branches->lastPage(),
-                'from' => $branches->firstItem(),
-                'to' => $branches->lastItem(),
-            ],
+            'message' => 'AVP Staff assignment deleted successfully.',
         ]);
     }
 
@@ -191,43 +506,32 @@ class AvpStaffController extends Controller
                 perPage: $perPage,
                 columns: [
                     'id',
-                    'firstName as firstname',
-                    'lastName as lastname',
-                    'userName as username',
-                    'email',
-                    'employee_id',
+                    'firstName',
+                    'lastName',
                     'position',
-                    'contact',
                     'branch_code',
                     'branch',
-                    'email_verified_at',
                 ],
             );
 
-        /*
-         * Candidate queries already guarantee the approver role.
-         * Add the role property to preserve the frontend user contract
-         * without exposing Spatie's internal roles relationship.
-         */
-        $users->getCollection()->transform(
-            function (User $user): User {
-                $user->setAttribute('role', 'approver');
+        return AvpStaffCandidateResource::collection($users)
+            ->additional([
+                'message' => $message,
+            ])
+            ->response();
+    }
 
-                return $user;
-            }
-        );
-
-        return response()->json([
-            'message' => $message,
-            'data' => $users->items(),
-            'meta' => [
-                'current_page' => $users->currentPage(),
-                'per_page' => $users->perPage(),
-                'total' => $users->total(),
-                'last_page' => $users->lastPage(),
-                'from' => $users->firstItem(),
-                'to' => $users->lastItem(),
-            ],
-        ]);
+    /**
+     * Relationships and safe columns required by the assignment resource.
+     *
+     * @return array<int, string>
+     */
+    private function assignmentRelations(): array
+    {
+        return [
+            'avp:id,firstName,lastName,position',
+            'staff:id,firstName,lastName,position',
+            'branches:id,branch_code,branch_name,branch,acronym',
+        ];
     }
 }

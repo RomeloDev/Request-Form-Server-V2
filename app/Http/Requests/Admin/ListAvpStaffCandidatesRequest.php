@@ -2,7 +2,7 @@
 
 namespace App\Http\Requests\Admin;
 
-use App\Models\User;
+use App\Models\AvpStaffAssignment;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -14,7 +14,7 @@ class ListAvpStaffCandidatesRequest extends FormRequest
      */
     public function authorize(): bool
     {
-        return $this->user()?->can('viewAny', User::class) ?? false;
+        return $this->user()?->can('viewAny', AvpStaffAssignment::class) ?? false;
     }
 
     /**

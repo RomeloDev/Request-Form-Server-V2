@@ -17,7 +17,7 @@ Route::get('/user', function (Request $request) {
     return $request->user();
 })->middleware('auth:sanctum');
 
-Route::prefix('v1')->middleware('throttle:10,1')->group(function () {
+Route::prefix('v1')->middleware('throttle:60,1')->group(function () {
     // Health check endpoint
     Route::get('/health', fn () => response()->json(['status' => 'ok']));
 
@@ -63,11 +63,7 @@ Route::prefix('v1')->middleware('throttle:10,1')->group(function () {
         Route::get('/approvers/candidates', [ApproverController::class, 'candidates']);
 
         // AVP Staff candidate endpoints
-        Route::get(
-            '/avp-staffs/avp-candidates',
-            [AvpStaffController::class, 'avpCandidates']
-        );
-
+        Route::get('/avp-staffs/avp-candidates', [AvpStaffController::class, 'avpCandidates']);
         Route::get('/avp-staffs/staff-candidates/{avp}', [AvpStaffController::class, 'staffCandidates']
         )->missing(
             fn () => response()->json([
@@ -75,5 +71,19 @@ Route::prefix('v1')->middleware('throttle:10,1')->group(function () {
             ], 404)
         );
         Route::get('/avp-staffs/available-branches', [AvpStaffController::class, 'availableBranches']);
+        // Create an AVP Staff branch-routing assignment.
+        Route::post('/avp-staffs', [AvpStaffController::class, 'store']);
+        // List configured AVP Staff assignments.
+        Route::get('/avp-staffs', [AvpStaffController::class, 'index']);
+        Route::put('/avp-staffs/{assignment}', [AvpStaffController::class, 'update'])->missing(
+            fn () => response()->json([
+                'message' => 'AVP Staff assignment not found.',
+            ], 404)
+        );
+        Route::delete('/avp-staffs/{assignment}', [AvpStaffController::class, 'destroy'])->missing(
+            fn () => response()->json([
+                'message' => 'AVP Staff assignment not found.',
+            ], 404)
+        );
     });
 });

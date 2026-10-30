@@ -1,0 +1,28 @@
+@host = http://localhost:8000
+@origin = http://localhost:3001
+@xsrfToken = eyJpdiI6Im5VRnBab21WVU5DRStBUXJFelArckE9PSIsInZhbHVlIjoiSE80ZXlUeHBVc3RWL3F5RnQ2SXJTTDR6aUlzL0Y4NzkyaUxrUnZqODAzdXlEWDdaNGYzSWMvWm9qUE5SNlMvSnVTbVdxQS9PeVdKMTNzMUVqcEEwM0tOTTlLQmROM0MrTG41eGt1NEZjYkdwWE1QbUFvRWtmcnBjVS92QSswM2QiLCJtYWMiOiJmOGNmYTE4NDliOThhM2M0MTU2NjgxOTRiMDJhMWVkZWY2ZTNiNTRiNzlmOTU2MTJlM2Q0MzM1OTEwZTFlNWEyIiwidGFnIjoiIn0=
+@positionValue = Web Developer II
+
+### 1. Start or refresh the CSRF session
+GET {{host}}/sanctum/csrf-cookie
+Accept: application/json
+Origin: {{origin}}
+
+### 2. Login with an existing verified local account
+# @prompt email Enter your local account email
+# @prompt password Enter your local account password
+POST {{host}}/api/v1/login
+Accept: application/json
+Content-Type: application/json
+Origin: {{origin}}
+X-XSRF-TOKEN: {{xsrfToken}}
+
+{
+  "email": "{{email}}",
+  "password": "{{password}}"
+}
+
+### 3. Confirm the login session
+GET {{host}}/api/v1/profile
+Accept: application/json
+Origin: {{origin}}
