@@ -3,6 +3,7 @@
 use App\Http\Controllers\API\V1\Admin\ApproverController;
 use App\Http\Controllers\API\V1\Admin\AvpStaffController;
 use App\Http\Controllers\API\V1\Admin\BranchController as AdminBranchController;
+use App\Http\Controllers\API\V1\Admin\BranchHeadController;
 use App\Http\Controllers\API\V1\Admin\PositionController as AdminPositionController;
 use App\Http\Controllers\API\V1\Admin\UserController;
 use App\Http\Controllers\API\V1\Auth\LoginController;
@@ -83,6 +84,55 @@ Route::prefix('v1')->middleware('throttle:60,1')->group(function () {
         Route::delete('/avp-staffs/{assignment}', [AvpStaffController::class, 'destroy'])->missing(
             fn () => response()->json([
                 'message' => 'AVP Staff assignment not found.',
+            ], 404)
+        );
+
+        // Branch Head candidate and branch-selection endpoints.
+        Route::get(
+            '/branch-heads/candidates',
+            [BranchHeadController::class, 'candidates']
+        );
+
+        Route::get(
+            '/branch-heads/available-branches',
+            [BranchHeadController::class, 'availableBranches']
+        );
+
+        // Branch Head assignment management endpoints.
+        Route::get(
+            '/branch-heads',
+            [BranchHeadController::class, 'index']
+        );
+
+        Route::post(
+            '/branch-heads',
+            [BranchHeadController::class, 'store']
+        );
+
+        Route::get(
+            '/branch-heads/{assignment}',
+            [BranchHeadController::class, 'show']
+        )->missing(
+            fn () => response()->json([
+                'message' => 'Branch Head assignment not found.',
+            ], 404)
+        );
+
+        Route::put(
+            '/branch-heads/{assignment}',
+            [BranchHeadController::class, 'update']
+        )->missing(
+            fn () => response()->json([
+                'message' => 'Branch Head assignment not found.',
+            ], 404)
+        );
+
+        Route::delete(
+            '/branch-heads/{assignment}',
+            [BranchHeadController::class, 'destroy']
+        )->missing(
+            fn () => response()->json([
+                'message' => 'Branch Head assignment not found.',
             ], 404)
         );
     });

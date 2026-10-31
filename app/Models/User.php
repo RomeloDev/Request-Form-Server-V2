@@ -59,4 +59,11 @@ class User extends Authenticatable
             'staff_user_id'
         );
     }
+
+    public function branchHeadAssignment(): HasOne
+    {
+        return $this->hasOne(
+            BranchHeadAssignment::class, 'user_id'
+        );
+    }
 }

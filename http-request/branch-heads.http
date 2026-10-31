@@ -1,0 +1,362 @@
+@host = http://localhost:8000
+@origin = http://localhost:3001
+
+# Replace these with IDs returned by the candidate and branch endpoints.
+@candidateUserId = 0
+@firstBranchId = 0
+@secondBranchId = 0
+@thirdBranchId = 0
+
+# Replace this after successfully creating an assignment.
+@assignmentId = 0
+
+
+###############################################################################
+# AUTHENTICATION
+###############################################################################
+
+### 1. Guest request should return 401
+GET {{host}}/api/v1/branch-heads?page=1&per_page=10
+Accept: application/json
+Origin: {{origin}}
+
+
+### 2. Start the Sanctum CSRF session
+GET {{host}}/sanctum/csrf-cookie
+Accept: application/json
+Origin: {{origin}}
+
+
+### 3. Sign in using a verified Admin account
+# @prompt email Enter your verified Admin email, username, or employee ID
+# @prompt password Enter your Admin password
+# @prompt xsrfToken Paste the URL-decoded XSRF-TOKEN cookie value
+
+POST {{host}}/api/v1/login
+Accept: application/json
+Content-Type: application/json
+Origin: {{origin}}
+X-XSRF-TOKEN: {{xsrfToken}}
+
+{
+  "email": "{{email}}",
+  "password": "{{password}}"
+}
+
+
+### 4. Confirm the authenticated session
+GET {{host}}/api/v1/profile
+Accept: application/json
+Origin: {{origin}}
+
+
+###############################################################################
+# CANDIDATE ENDPOINT
+###############################################################################
+
+### 5. List eligible Branch Head candidates
+# Expected: 200
+GET {{host}}/api/v1/branch-heads/candidates?page=1&per_page=10
+Accept: application/json
+Origin: {{origin}}
+
+
+### 6. Search candidates
+GET {{host}}/api/v1/branch-heads/candidates?search=Manager&sort=firstname&direction=asc&page=1&per_page=10
+Accept: application/json
+Origin: {{origin}}
+
+
+### 7. Sort candidates by position
+GET {{host}}/api/v1/branch-heads/candidates?sort=position&direction=asc&page=1&per_page=20
+Accept: application/json
+Origin: {{origin}}
+
+
+### 8. Invalid candidate sort should return 422
+GET {{host}}/api/v1/branch-heads/candidates?sort=password
+Accept: application/json
+Origin: {{origin}}
+
+
+### 9. Invalid candidate page size should return 422
+GET {{host}}/api/v1/branch-heads/candidates?per_page=15
+Accept: application/json
+Origin: {{origin}}
+
+
+###############################################################################
+# AVAILABLE BRANCH ENDPOINT
+###############################################################################
+
+### 10. List available Branches
+# Expected: 200
+GET {{host}}/api/v1/branch-heads/available-branches?page=1&per_page=10
+Accept: application/json
+Origin: {{origin}}
+
+
+### 11. Search available Branches
+GET {{host}}/api/v1/branch-heads/available-branches?search=CALI&sort=branch_code&direction=asc&page=1&per_page=10
+Accept: application/json
+Origin: {{origin}}
+
+
+### 12. Sort Branches by name
+GET {{host}}/api/v1/branch-heads/available-branches?sort=branch_name&direction=asc&page=1&per_page=20
+Accept: application/json
+Origin: {{origin}}
+
+
+### 13. Invalid Branch sort should return 422
+GET {{host}}/api/v1/branch-heads/available-branches?sort=firstname
+Accept: application/json
+Origin: {{origin}}
+
+
+### 14. Invalid search length should return 422
+GET {{host}}/api/v1/branch-heads/available-branches?search=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+Accept: application/json
+Origin: {{origin}}
+
+
+###############################################################################
+# ASSIGNMENT DIRECTORY
+###############################################################################
+
+### 15. List Branch Head assignments
+# Expected: 200
+GET {{host}}/api/v1/branch-heads?page=1&per_page=10
+Accept: application/json
+Origin: {{origin}}
+
+
+### 16. Search assignments by User or Branch
+GET {{host}}/api/v1/branch-heads?search=CALI&sort=created_at&direction=desc&page=1&per_page=10
+Accept: application/json
+Origin: {{origin}}
+
+
+### 17. Sort assignments by ID
+GET {{host}}/api/v1/branch-heads?sort=id&direction=asc&page=1&per_page=20
+Accept: application/json
+Origin: {{origin}}
+
+
+### 18. Invalid assignment sort should return 422
+GET {{host}}/api/v1/branch-heads?sort=firstname
+Accept: application/json
+Origin: {{origin}}
+
+
+###############################################################################
+# CREATE VALIDATION
+###############################################################################
+
+### 19. Empty create request should return 422
+# @prompt xsrfToken Paste the URL-decoded XSRF-TOKEN cookie value
+
+POST {{host}}/api/v1/branch-heads
+Accept: application/json
+Content-Type: application/json
+Origin: {{origin}}
+X-XSRF-TOKEN: {{xsrfToken}}
+
+{}
+
+
+### 20. Duplicate Branch IDs should return 422
+# @prompt xsrfToken Paste the URL-decoded XSRF-TOKEN cookie value
+
+POST {{host}}/api/v1/branch-heads
+Accept: application/json
+Content-Type: application/json
+Origin: {{origin}}
+X-XSRF-TOKEN: {{xsrfToken}}
+
+{
+  "user_id": {{candidateUserId}},
+  "branch_ids": [
+    {{firstBranchId}},
+    {{firstBranchId}}
+  ]
+}
+
+
+### 21. Privileged fields should return 422
+# @prompt xsrfToken Paste the URL-decoded XSRF-TOKEN cookie value
+
+POST {{host}}/api/v1/branch-heads
+Accept: application/json
+Content-Type: application/json
+Origin: {{origin}}
+X-XSRF-TOKEN: {{xsrfToken}}
+
+{
+  "user_id": {{candidateUserId}},
+  "branch_ids": [
+    {{firstBranchId}}
+  ],
+  "role": "Admin",
+  "is_admin": true
+}
+
+
+###############################################################################
+# CREATE ASSIGNMENT
+###############################################################################
+
+### 22. Create a Branch Head assignment
+# Use only disposable candidate and Branch records.
+# Expected: 201
+# @prompt xsrfToken Paste the URL-decoded XSRF-TOKEN cookie value
+
+POST {{host}}/api/v1/branch-heads
+Accept: application/json
+Content-Type: application/json
+Origin: {{origin}}
+X-XSRF-TOKEN: {{xsrfToken}}
+
+{
+  "user_id": {{candidateUserId}},
+  "branch_ids": [
+    {{firstBranchId}},
+    {{secondBranchId}}
+  ]
+}
+
+
+### After creation:
+# Copy data.id from the response into @assignmentId above.
+
+
+###############################################################################
+# SHOW ASSIGNMENT
+###############################################################################
+
+### 23. Show one assignment
+# Expected: 200
+GET {{host}}/api/v1/branch-heads/{{assignmentId}}
+Accept: application/json
+Origin: {{origin}}
+
+
+### 24. Unknown assignment should return custom 404
+GET {{host}}/api/v1/branch-heads/999999
+Accept: application/json
+Origin: {{origin}}
+
+
+###############################################################################
+# VERIFY CREATE FILTERING
+###############################################################################
+
+### 25. Assigned User should no longer appear as a candidate
+GET {{host}}/api/v1/branch-heads/candidates?search=Manager&page=1&per_page=50
+Accept: application/json
+Origin: {{origin}}
+
+
+### 26. Assigned Branches should no longer appear as available
+GET {{host}}/api/v1/branch-heads/available-branches?page=1&per_page=50
+Accept: application/json
+Origin: {{origin}}
+
+
+###############################################################################
+# UPDATE VALIDATION
+###############################################################################
+
+### 27. Update must reject User identity changes
+# Expected: 422
+# @prompt xsrfToken Paste the URL-decoded XSRF-TOKEN cookie value
+
+PUT {{host}}/api/v1/branch-heads/{{assignmentId}}
+Accept: application/json
+Content-Type: application/json
+Origin: {{origin}}
+X-XSRF-TOKEN: {{xsrfToken}}
+
+{
+  "user_id": {{candidateUserId}},
+  "branch_ids": [
+    {{firstBranchId}}
+  ]
+}
+
+
+### 28. Update must require at least one Branch
+# Expected: 422
+# @prompt xsrfToken Paste the URL-decoded XSRF-TOKEN cookie value
+
+PUT {{host}}/api/v1/branch-heads/{{assignmentId}}
+Accept: application/json
+Content-Type: application/json
+Origin: {{origin}}
+X-XSRF-TOKEN: {{xsrfToken}}
+
+{
+  "branch_ids": []
+}
+
+
+###############################################################################
+# UPDATE ASSIGNMENT
+###############################################################################
+
+### 29. Replace the complete Branch set
+# Keeps firstBranchId, removes secondBranchId, adds thirdBranchId.
+# Expected: 200
+# @prompt xsrfToken Paste the URL-decoded XSRF-TOKEN cookie value
+
+PUT {{host}}/api/v1/branch-heads/{{assignmentId}}
+Accept: application/json
+Content-Type: application/json
+Origin: {{origin}}
+X-XSRF-TOKEN: {{xsrfToken}}
+
+{
+  "branch_ids": [
+    {{firstBranchId}},
+    {{thirdBranchId}}
+  ]
+}
+
+
+### 30. Confirm the updated assignment
+GET {{host}}/api/v1/branch-heads/{{assignmentId}}
+Accept: application/json
+Origin: {{origin}}
+
+
+###############################################################################
+# DELETE ASSIGNMENT
+###############################################################################
+
+### 31. Delete the assignment
+# Use only a disposable assignment.
+# Expected: 200
+# @prompt xsrfToken Paste the URL-decoded XSRF-TOKEN cookie value
+
+DELETE {{host}}/api/v1/branch-heads/{{assignmentId}}
+Accept: application/json
+Origin: {{origin}}
+X-XSRF-TOKEN: {{xsrfToken}}
+
+
+### 32. Deleted assignment should now return 404
+GET {{host}}/api/v1/branch-heads/{{assignmentId}}
+Accept: application/json
+Origin: {{origin}}
+
+
+### 33. Deleted User should become an eligible candidate again
+GET {{host}}/api/v1/branch-heads/candidates?page=1&per_page=50
+Accept: application/json
+Origin: {{origin}}
+
+
+### 34. Deleted assignment's Branches should become available again
+GET {{host}}/api/v1/branch-heads/available-branches?page=1&per_page=50
+Accept: application/json
+Origin: {{origin}}

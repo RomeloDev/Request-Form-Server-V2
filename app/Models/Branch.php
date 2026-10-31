@@ -33,4 +33,14 @@ class Branch extends Model
             'avp_staff_assignment_id'
         )->withTimestamps();
     }
+
+    public function branchHeadAssignments(): BelongsToMany
+    {
+        return $this->belongsToMany(
+            BranchHeadAssignment::class,
+            'branch_head_assignment_branch',
+            'branch_id',
+            'branch_head_assignment_id'
+        )->withTimestamps();
+    }
 }
