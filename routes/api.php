@@ -11,6 +11,7 @@ use App\Http\Controllers\API\V1\Auth\ProfileController;
 use App\Http\Controllers\API\V1\Auth\RegisterController;
 use App\Http\Controllers\API\V1\BranchController;
 use App\Http\Controllers\API\V1\PositionController;
+use App\Http\Controllers\API\V1\RequestFormController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -25,8 +26,8 @@ Route::prefix('v1')->middleware('throttle:60,1')->group(function () {
     // Public endpoints
     Route::get('/view-branch', [BranchController::class, 'viewBranch'])->name('view.branch');
     Route::get('/positions', [PositionController::class, 'index']);
-    Route::post('/register', [RegisterController::class, 'register']);
-    Route::post('/login', [LoginController::class, 'login']);
+    Route::post('/register', [RegisterController::class, 'register'])->middleware('throttle:10,1');
+    Route::post('/login', [LoginController::class, 'login'])->middleware('throttle:10,1');
 
     // Protected endpoints
     Route::middleware('auth:sanctum')->group(function () {
@@ -92,23 +93,19 @@ Route::prefix('v1')->middleware('throttle:60,1')->group(function () {
             '/branch-heads/candidates',
             [BranchHeadController::class, 'candidates']
         );
-
         Route::get(
             '/branch-heads/available-branches',
             [BranchHeadController::class, 'availableBranches']
         );
-
         // Branch Head assignment management endpoints.
         Route::get(
             '/branch-heads',
             [BranchHeadController::class, 'index']
         );
-
         Route::post(
             '/branch-heads',
             [BranchHeadController::class, 'store']
         );
-
         Route::get(
             '/branch-heads/{assignment}',
             [BranchHeadController::class, 'show']
@@ -117,7 +114,6 @@ Route::prefix('v1')->middleware('throttle:60,1')->group(function () {
                 'message' => 'Branch Head assignment not found.',
             ], 404)
         );
-
         Route::put(
             '/branch-heads/{assignment}',
             [BranchHeadController::class, 'update']
@@ -126,7 +122,6 @@ Route::prefix('v1')->middleware('throttle:60,1')->group(function () {
                 'message' => 'Branch Head assignment not found.',
             ], 404)
         );
-
         Route::delete(
             '/branch-heads/{assignment}',
             [BranchHeadController::class, 'destroy']
@@ -135,5 +130,16 @@ Route::prefix('v1')->middleware('throttle:60,1')->group(function () {
                 'message' => 'Branch Head assignment not found.',
             ], 404)
         );
+
+        /*
+        * User request submission endpoints.
+        *
+        * This route is authenticated here and authorized again by the
+        * StoreStockRequisitionRequest through RequestFormPolicy.
+        */
+        Route::post(
+            '/request-forms/stock-requisitions',
+            [RequestFormController::class, 'storeStockRequisition']
+        )->middleware('throttle:10,1')->name('request-forms.stock-requisitions.store');
     });
 });

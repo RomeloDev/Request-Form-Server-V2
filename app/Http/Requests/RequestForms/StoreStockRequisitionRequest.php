@@ -52,6 +52,7 @@ class StoreStockRequisitionRequest extends FormRequest
                 'required',
                 'numeric',
                 'gt:0',
+                'lte:100000',
                 'decimal:0,3',
             ],
             'items.*.unit' => [
@@ -68,6 +69,7 @@ class StoreStockRequisitionRequest extends FormRequest
                 'required',
                 'numeric',
                 'min:0',
+                'lte:999999',
                 'decimal:0,2',
             ],
             'items.*.remarks' => [
@@ -94,12 +96,23 @@ class StoreStockRequisitionRequest extends FormRequest
             'items.*.line_number' => ['prohibited'],
             'items.*.line_total' => ['prohibited'],
 
+            'attachments' => [
+                'sometimes',
+                'array',
+                'max:10',
+            ],
+
+            'attachments.*' => [
+                'required',
+                'file',
+                'mimes:pdf,jpg,jpeg,png,webp,docx,xlsx',
+                'max:5120', // 5 MB
+            ],
+
             /*
-             * Upload support will get its own validation lesson.
-             * Until then, do not silently accept files.
-             */
+            * Reject the singular field so the API has one unambiguous contract.
+            */
             'attachment' => ['prohibited'],
-            'attachments' => ['prohibited'],
         ];
     }
 }
