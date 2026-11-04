@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\RequestForms;
 
+use App\Models\AvpStaffAssignment;
 use App\Models\Branch;
 use App\Models\RequestForm;
 use App\Models\User;
@@ -39,7 +40,7 @@ class StoreStockRequisitionTest extends TestCase
     {
         $this->postJson(
             '/api/v1/request-forms/stock-requisitions',
-            $this->validPayload(),
+            $this->validPayload([999999]),
         )->assertUnauthorized();
 
         $this->assertDatabaseCount('request_forms', 0);
@@ -61,7 +62,7 @@ class StoreStockRequisitionTest extends TestCase
 
         $this->postJson(
             '/api/v1/request-forms/stock-requisitions',
-            $this->validPayload(),
+            $this->validPayload([$user->id]),
         )->assertForbidden();
 
         $this->assertDatabaseCount('request_forms', 0);
@@ -77,10 +78,15 @@ class StoreStockRequisitionTest extends TestCase
             branch: $branch,
             role: 'User',
         );
+        $notedBy = $this->user($branch, 'approver');
+        $approvedBy = $this->user($branch, 'approver');
 
         Sanctum::actingAs($user);
 
-        $payload = $this->validPayload();
+        $payload = $this->validPayload(
+            approvedByIds: [$approvedBy->id],
+            notedByIds: [$notedBy->id],
+        );
 
         $payload['attachments'] = [
             UploadedFile::fake()->create(
@@ -131,7 +137,32 @@ class StoreStockRequisitionTest extends TestCase
                 $branch->id,
             )
             ->assertJsonCount(2, 'data.items')
-            ->assertJsonCount(1, 'data.attachments');
+            ->assertJsonCount(1, 'data.attachments')
+            ->assertJsonCount(2, 'data.approval_steps')
+            ->assertJsonPath(
+                'data.approval_steps.0.level',
+                1,
+            )
+            ->assertJsonPath(
+                'data.approval_steps.0.step_type',
+                'noted_by',
+            )
+            ->assertJsonPath(
+                'data.approval_steps.0.approver.id',
+                $notedBy->id,
+            )
+            ->assertJsonPath(
+                'data.approval_steps.1.level',
+                2,
+            )
+            ->assertJsonPath(
+                'data.approval_steps.1.step_type',
+                'approved_by',
+            )
+            ->assertJsonPath(
+                'data.approval_steps.1.approver.id',
+                $approvedBy->id,
+            );
 
         /*
          * The Resource must not expose private storage information.
@@ -142,12 +173,19 @@ class StoreStockRequisitionTest extends TestCase
             )
             ->assertJsonMissingPath(
                 'data.attachments.0.path'
+            )
+            ->assertJsonMissingPath(
+                'data.approval_steps.0.approver.email'
+            )
+            ->assertJsonMissingPath(
+                'data.approval_steps.0.approver.roles'
             );
 
         $requestForm = RequestForm::query()
             ->with([
                 'items',
                 'attachments',
+                'approvalSteps',
             ])
             ->sole();
 
@@ -176,6 +214,19 @@ class StoreStockRequisitionTest extends TestCase
         );
 
         $this->assertCount(2, $requestForm->items);
+        $this->assertCount(2, $requestForm->approvalSteps);
+        $this->assertSame(
+            [1, 2],
+            $requestForm->approvalSteps
+                ->pluck('level')
+                ->all(),
+        );
+        $this->assertSame(
+            [$notedBy->id, $approvedBy->id],
+            $requestForm->approvalSteps
+                ->pluck('approver_id')
+                ->all(),
+        );
         $this->assertSame(
             '250.50',
             $requestForm->items[0]->line_total,
@@ -201,11 +252,12 @@ class StoreStockRequisitionTest extends TestCase
     {
         $branch = $this->branch('TEST');
         $user = $this->user($branch);
+        $approvedBy = $this->user($branch, 'approver');
 
         Sanctum::actingAs($user);
 
         $payload = [
-            ...$this->validPayload(),
+            ...$this->validPayload([$approvedBy->id]),
 
             /*
              * An attacker may try to submit a request as another user,
@@ -216,6 +268,18 @@ class StoreStockRequisitionTest extends TestCase
             'status' => 'Completed',
             'grand_total' => '0.01',
             'request_code' => 'FAKE-001',
+            'approval_steps' => [
+                [
+                    'approver_id' => $approvedBy->id,
+                    'level' => 99,
+                    'status' => 'Approved',
+                ],
+            ],
+            'approver_id' => $approvedBy->id,
+            'level' => 99,
+            'step_type' => 'approved_by',
+            'approval_status' => 'Approved',
+            'acted_at' => now()->toISOString(),
         ];
 
         $this->postJson(
@@ -229,10 +293,105 @@ class StoreStockRequisitionTest extends TestCase
                 'status',
                 'grand_total',
                 'request_code',
+                'approval_steps',
+                'approver_id',
+                'level',
+                'step_type',
+                'approval_status',
+                'acted_at',
             ]);
 
         $this->assertDatabaseCount('request_forms', 0);
         $this->assertDatabaseCount('request_items', 0);
+    }
+
+    public function test_approved_by_is_required_and_cannot_overlap_noted_by(): void
+    {
+        $branch = $this->branch('TEST');
+        $user = $this->user($branch);
+        $approver = $this->user($branch, 'approver');
+
+        Sanctum::actingAs($user);
+
+        $missingApprovedBy = $this->validPayload([$approver->id]);
+        unset($missingApprovedBy['approved_by_ids']);
+
+        $this->postJson(
+            '/api/v1/request-forms/stock-requisitions',
+            $missingApprovedBy,
+        )
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['approved_by_ids']);
+
+        $this->postJson(
+            '/api/v1/request-forms/stock-requisitions',
+            $this->validPayload(
+                approvedByIds: [$approver->id],
+                notedByIds: [$approver->id],
+            ),
+        )
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['approved_by_ids']);
+
+        $this->assertDatabaseCount('request_forms', 0);
+        $this->assertDatabaseCount('request_approval_steps', 0);
+    }
+
+    public function test_avp_delegated_staff_is_saved_before_the_avp(): void
+    {
+        $requesterBranch = $this->branch('CALI');
+        $headOffice = $this->branch('HO');
+        $requester = $this->user($requesterBranch);
+        $avp = $this->user(
+            branch: $headOffice,
+            role: 'approver',
+            position: 'AVP - Finance',
+        );
+        $staff = $this->user($requesterBranch, 'approver');
+
+        $assignment = AvpStaffAssignment::create([
+            'avp_user_id' => $avp->id,
+            'staff_user_id' => $staff->id,
+        ]);
+        $assignment->branches()->attach($requesterBranch->id);
+
+        Sanctum::actingAs($requester);
+
+        $response = $this->postJson(
+            '/api/v1/request-forms/stock-requisitions',
+            $this->validPayload([$avp->id]),
+        );
+
+        $response
+            ->assertCreated()
+            ->assertJsonCount(2, 'data.approval_steps')
+            ->assertJsonPath(
+                'data.approval_steps.0.step_type',
+                'delegated_approval',
+            )
+            ->assertJsonPath(
+                'data.approval_steps.0.approver.id',
+                $staff->id,
+            )
+            ->assertJsonPath(
+                'data.approval_steps.1.step_type',
+                'approved_by',
+            )
+            ->assertJsonPath(
+                'data.approval_steps.1.approver.id',
+                $avp->id,
+            );
+
+        $requestForm = RequestForm::query()
+            ->with('approvalSteps')
+            ->sole();
+
+        $this->assertSame(
+            [$staff->id, $avp->id],
+            $requestForm->approvalSteps
+                ->pluck('approver_id')
+                ->all(),
+        );
     }
 
     /**
@@ -246,13 +405,17 @@ class StoreStockRequisitionTest extends TestCase
      *
      * @return array<string, mixed>
      */
-    private function validPayload(): array
-    {
+    private function validPayload(
+        array $approvedByIds,
+        array $notedByIds = [],
+    ): array {
         return [
             'kind_of_request' => 'Office supplies',
             'form_data' => [
                 'purpose' => 'Replace depleted office supplies.',
             ],
+            'noted_by_ids' => $notedByIds,
+            'approved_by_ids' => $approvedByIds,
             'items' => [
                 [
                     'quantity' => '2.5',
@@ -285,6 +448,7 @@ class StoreStockRequisitionTest extends TestCase
     private function user(
         ?Branch $branch,
         ?string $role = 'User',
+        string $position = 'Employee',
     ): User {
         $number = ++$this->sequence;
 
@@ -294,7 +458,7 @@ class StoreStockRequisitionTest extends TestCase
             'contact' => "0917000{$number}",
             'branch_code' => $branch?->branch_code,
             'branch' => $branch?->branch,
-            'position' => 'Employee',
+            'position' => $position,
             'userName' => "request-user-{$number}",
             'employee_id' => "REQUEST-EMP-{$number}",
         ]);
@@ -317,7 +481,7 @@ class StoreStockRequisitionTest extends TestCase
 
         $this->postJson(
             '/api/v1/request-forms/stock-requisitions',
-            $this->validPayload(),
+            $this->validPayload([$user->id]),
         )
             ->assertUnprocessable()
             ->assertJsonValidationErrors(['branch']);
@@ -343,7 +507,7 @@ class StoreStockRequisitionTest extends TestCase
 
         $this->postJson(
             '/api/v1/request-forms/stock-requisitions',
-            $this->validPayload(),
+            $this->validPayload([$user->id]),
         )
             ->assertUnprocessable()
             ->assertJsonValidationErrors(['branch']);
@@ -357,10 +521,11 @@ class StoreStockRequisitionTest extends TestCase
 
         $branch = $this->branch('TEST');
         $user = $this->user($branch);
+        $approvedBy = $this->user($branch, 'approver');
 
         Sanctum::actingAs($user);
 
-        $payload = $this->validPayload();
+        $payload = $this->validPayload([$approvedBy->id]);
 
         $payload['attachments'] = [
             UploadedFile::fake()->create(
@@ -393,10 +558,11 @@ class StoreStockRequisitionTest extends TestCase
 
         $branch = $this->branch('TEST');
         $user = $this->user($branch);
+        $approvedBy = $this->user($branch, 'approver');
 
         Sanctum::actingAs($user);
 
-        $payload = $this->validPayload();
+        $payload = $this->validPayload([$approvedBy->id]);
 
         /*
         * UploadedFile::fake()->create() receives its size in kilobytes.
@@ -434,10 +600,11 @@ class StoreStockRequisitionTest extends TestCase
 
         $branch = $this->branch('TEST');
         $user = $this->user($branch);
+        $approvedBy = $this->user($branch, 'approver');
 
         Sanctum::actingAs($user);
 
-        $payload = $this->validPayload();
+        $payload = $this->validPayload([$approvedBy->id]);
 
         $payload['attachments'] = collect(range(1, 11))
             ->map(
@@ -473,6 +640,7 @@ class StoreStockRequisitionTest extends TestCase
 
         $branch = $this->branch('TEST');
         $user = $this->user($branch);
+        $approvedBy = $this->user($branch, 'approver');
 
         Sanctum::actingAs($user);
 
@@ -489,7 +657,7 @@ class StoreStockRequisitionTest extends TestCase
             'application/pdf',
         );
 
-        $payload = $this->validPayload();
+        $payload = $this->validPayload([$approvedBy->id]);
 
         $payload['attachments'] = [
             $sameFile,

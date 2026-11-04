@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources;
 
+use App\Models\RequestApprovalStep;
 use App\Models\RequestAttachment;
 use App\Models\RequestItem;
 use Illuminate\Http\Request;
@@ -80,6 +81,33 @@ class RequestFormResource extends JsonResource
                             'mime_type' => $attachment->mime_type,
                             'size_bytes' => $attachment->size_bytes,
                         ]
+                    )
+                    ->values(),
+            ),
+
+            'approval_steps' => $this->whenLoaded(
+                'approvalSteps',
+                fn () => $this->approvalSteps
+                    ->map(
+                        fn (RequestApprovalStep $step): array => [
+                            'id' => $step->id,
+                            'level' => $step->level,
+                            'step_type' => $step->step_type->value,
+                            'status' => $step->status->value,
+                            'comment' => $step->comment,
+                            'acted_at' => $step->acted_at?->toISOString(),
+
+                            /*
+                            * Return only the approver information needed by the
+                            * request details screen.
+                            */
+                            'approver' => [
+                                'id' => $step->approver->id,
+                                'firstname' => $step->approver->firstName,
+                                'lastname' => $step->approver->lastName,
+                                'position' => $step->approver->position,
+                            ],
+                        ],
                     )
                     ->values(),
             ),

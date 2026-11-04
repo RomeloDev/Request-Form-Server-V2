@@ -1,0 +1,337 @@
+@host = http://localhost:8000
+@origin = http://localhost:3001
+
+# Replace this with an ID returned by the approver-candidates endpoint.
+@approvedById = 0
+
+###############################################################################
+# HOW TO USE THIS FILE
+###############################################################################
+
+# 1. Start Laravel: php artisan serve
+# 2. Run request 1 to see that a guest is rejected.
+# 3. Run request 2 to create the Sanctum CSRF cookie.
+# 4. Copy the XSRF-TOKEN cookie value, URL-decode it, and use it when the
+#    xsrfToken prompt appears in request 3.
+# 5. Run request 3 with a verified User or approver account.
+# 6. Run request 4 to confirm the authenticated session.
+# 7. Run request 5, then copy an eligible candidate ID into approvedById.
+# 8. Run request 8 or 9 to create a Stock Requisition.
+#
+# VS Code REST Client keeps cookies for the same host. If you receive 401,
+# repeat requests 2 and 3. If you receive 419, refresh the CSRF cookie and
+# paste the newest URL-decoded XSRF-TOKEN value.
+
+
+###############################################################################
+# AUTHENTICATION
+###############################################################################
+
+### 1. Guest request: expected 401 Unauthorized
+GET {{host}}/api/v1/request-forms/approver-candidates?page=1&per_page=10
+Accept: application/json
+Origin: {{origin}}
+
+
+### 2. Start or refresh the Laravel Sanctum CSRF session
+GET {{host}}/sanctum/csrf-cookie
+Accept: application/json
+Origin: {{origin}}
+
+
+### 3. Sign in with a verified User or approver account
+# @prompt login Enter your username, email, or employee ID
+# @prompt password Enter your password
+# @prompt xsrfToken Paste the URL-decoded XSRF-TOKEN cookie value
+POST {{host}}/api/v1/login
+Accept: application/json
+Content-Type: application/json
+Origin: {{origin}}
+X-XSRF-TOKEN: {{xsrfToken}}
+
+{
+  "email": "{{login}}",
+  "password": "{{password}}"
+}
+
+
+### 4. Confirm the authenticated session
+GET {{host}}/api/v1/profile
+Accept: application/json
+Origin: {{origin}}
+
+
+###############################################################################
+# GET /api/v1/request-forms/approver-candidates
+###############################################################################
+
+### 5. List eligible approvers for the authenticated requester's branch
+# Expected: 200 OK
+#
+# The server derives the requester and branch from the Sanctum session.
+# Never add user_id, requester_id, or branch_id to this request.
+GET {{host}}/api/v1/request-forms/approver-candidates?page=1&per_page=10&sort=firstname&direction=asc
+Accept: application/json
+Origin: {{origin}}
+
+
+### 6. Search eligible approvers
+GET {{host}}/api/v1/request-forms/approver-candidates?search=Juan&sort=lastname&direction=asc&page=1&per_page=10
+Accept: application/json
+Origin: {{origin}}
+
+
+### Candidate response structure (example)
+# {
+#   "data": [
+#     {
+#       "id": 18,
+#       "firstname": "Juan",
+#       "lastname": "Cruz",
+#       "position": "Area Manager",
+#       "branch_code": "CALI",
+#       "branch": "SMCT Group of Companies"
+#     }
+#   ],
+#   "links": {
+#     "first": "...page=1",
+#     "last": "...page=1",
+#     "prev": null,
+#     "next": null
+#   },
+#   "meta": {
+#     "current_page": 1,
+#     "from": 1,
+#     "last_page": 1,
+#     "per_page": 10,
+#     "to": 1,
+#     "total": 1
+#   },
+#   "message": "Eligible request approvers retrieved successfully."
+# }
+
+
+### 7. Invalid page size: expected 422 Unprocessable Content
+GET {{host}}/api/v1/request-forms/approver-candidates?per_page=15
+Accept: application/json
+Origin: {{origin}}
+
+
+###############################################################################
+# POST /api/v1/request-forms/stock-requisitions
+###############################################################################
+
+### 8. Create a Stock Requisition without attachments (JSON version)
+# Expected: 201 Created
+#
+# Before running this request, replace approvedById at the top of this file
+# with an eligible ID returned by request 5.
+#
+# The order of each ID array is meaningful. Laravel creates all Noted By
+# steps first, followed by Approved By steps. It may insert delegated AVP
+# staff automatically; the browser must not submit that delegated step.
+# @prompt xsrfToken Paste the URL-decoded XSRF-TOKEN cookie value
+POST {{host}}/api/v1/request-forms/stock-requisitions
+Accept: application/json
+Content-Type: application/json
+Origin: {{origin}}
+X-XSRF-TOKEN: {{xsrfToken}}
+
+{
+  "kind_of_request": "Office supplies",
+  "form_data": {
+    "purpose": "Replace depleted office supplies."
+  },
+  "noted_by_ids": [],
+  "approved_by_ids": [
+    {{approvedById}}
+  ],
+  "items": [
+    {
+      "quantity": "2.5",
+      "unit": "ream",
+      "description": "A4 bond paper",
+      "unit_cost": "100.20",
+      "remarks": "For Accounting"
+    },
+    {
+      "quantity": "3",
+      "unit": "box",
+      "description": "Black ballpens",
+      "unit_cost": "20.15",
+      "remarks": null
+    }
+  ]
+}
+
+
+### Stock Requisition success response structure (example)
+# {
+#   "data": {
+#     "id": 42,
+#     "request_code": "CALI-SRL-0000042",
+#     "form_type": "Stock Requisition Slip",
+#     "kind_of_request": "Office supplies",
+#     "currency": "PHP",
+#     "status": "Pending",
+#     "form_data": {
+#       "purpose": "Replace depleted office supplies."
+#     },
+#     "grand_total": "310.95",
+#     "requester": {
+#       "id": 7,
+#       "firstname": "Learning",
+#       "lastname": "User",
+#       "position": "Employee"
+#     },
+#     "branch": {
+#       "id": 3,
+#       "branch_code": "CALI",
+#       "branch_name": "Caloocan Branch",
+#       "branch": "SMCT Group of Companies",
+#       "acronym": "CALI"
+#     },
+#     "items": [
+#       {
+#         "id": 80,
+#         "line_number": 1,
+#         "quantity": "2.500",
+#         "unit": "ream",
+#         "description": "A4 bond paper",
+#         "unit_cost": "100.20",
+#         "line_total": "250.50",
+#         "remarks": "For Accounting",
+#         "item_data": null
+#       }
+#     ],
+#     "attachments": [],
+#     "approval_steps": [
+#       {
+#         "id": 90,
+#         "level": 1,
+#         "step_type": "approved_by",
+#         "status": "Pending",
+#         "comment": null,
+#         "acted_at": null,
+#         "approver": {
+#           "id": 18,
+#           "firstname": "Juan",
+#           "lastname": "Cruz",
+#           "position": "Area Manager"
+#         }
+#       }
+#     ],
+#     "created_at": "2026-11-04T08:00:00.000000Z",
+#     "updated_at": "2026-11-04T08:00:00.000000Z"
+#   },
+#   "message": "Stock Requisition created successfully."
+# }
+
+
+### 9. Create a Stock Requisition with an attachment (multipart version)
+# Expected: 201 Created
+#
+# Change the path after '<' to an existing local PDF. The file must be no
+# larger than 5 MB. You can also use jpg, jpeg, png, webp, docx, or xlsx.
+#
+# Multipart field names such as items[0][quantity] become nested PHP arrays:
+# items[0][quantity] -> $data['items'][0]['quantity']
+# @prompt xsrfToken Paste the URL-decoded XSRF-TOKEN cookie value
+POST {{host}}/api/v1/request-forms/stock-requisitions
+Accept: application/json
+Content-Type: multipart/form-data; boundary=RequestFormBoundary
+Origin: {{origin}}
+X-XSRF-TOKEN: {{xsrfToken}}
+
+--RequestFormBoundary
+Content-Disposition: form-data; name="kind_of_request"
+
+Office supplies
+--RequestFormBoundary
+Content-Disposition: form-data; name="form_data[purpose]"
+
+Purchase supplies supported by an attached quotation.
+--RequestFormBoundary
+Content-Disposition: form-data; name="approved_by_ids[0]"
+
+{{approvedById}}
+--RequestFormBoundary
+Content-Disposition: form-data; name="items[0][quantity]"
+
+2
+--RequestFormBoundary
+Content-Disposition: form-data; name="items[0][unit]"
+
+ream
+--RequestFormBoundary
+Content-Disposition: form-data; name="items[0][description]"
+
+A4 bond paper
+--RequestFormBoundary
+Content-Disposition: form-data; name="items[0][unit_cost]"
+
+100.20
+--RequestFormBoundary
+Content-Disposition: form-data; name="items[0][remarks]"
+
+For Accounting
+--RequestFormBoundary
+Content-Disposition: form-data; name="attachments[0]"; filename="quotation.pdf"
+Content-Type: application/pdf
+
+< C:/replace/this/path/quotation.pdf
+--RequestFormBoundary--
+
+
+### 10. Missing Approved By: expected 422 Unprocessable Content
+# @prompt xsrfToken Paste the URL-decoded XSRF-TOKEN cookie value
+POST {{host}}/api/v1/request-forms/stock-requisitions
+Accept: application/json
+Content-Type: application/json
+Origin: {{origin}}
+X-XSRF-TOKEN: {{xsrfToken}}
+
+{
+  "kind_of_request": "Office supplies",
+  "form_data": {
+    "purpose": "Demonstrate a validation response."
+  },
+  "items": [
+    {
+      "quantity": "1",
+      "unit": "piece",
+      "description": "Test item",
+      "unit_cost": "10.00",
+      "remarks": null
+    }
+  ]
+}
+
+
+### Validation error response structure (example)
+# {
+#   "message": "The approved by ids field is required.",
+#   "errors": {
+#     "approved_by_ids": [
+#       "The approved by ids field is required."
+#     ]
+#   }
+# }
+
+
+###############################################################################
+# IMPORTANT SECURITY BOUNDARY
+###############################################################################
+
+# Do not send any of these fields:
+# - requester_id or user_id
+# - branch_id
+# - request_code
+# - status
+# - currency
+# - grand_total
+# - items[*].line_number or items[*].line_total
+# - approval_steps, level, step_type, approval_status, or acted_at
+#
+# Laravel derives or calculates all of them from the authenticated user,
+# validated input, database routing assignments, and server-side arithmetic.

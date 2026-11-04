@@ -2,9 +2,12 @@
 
 namespace App\Services;
 
+use App\Enums\ApprovalStepStatus;
+use App\Enums\ApprovalStepType;
 use App\Enums\RequestFormType;
 use App\Enums\RequestStatus;
 use App\Models\Branch;
+use App\Models\RequestApprovalStep;
 use App\Models\RequestForm;
 use App\Models\RequestItem;
 use App\Models\User;
@@ -18,6 +21,10 @@ use Throwable;
 
 class StockRequisitionService
 {
+    public function __construct(
+        private readonly RequestApprovalChainResolver $approvalChainResolver,
+    ) {}
+
     /**
      * Create one Stock Requisition and all of its related records.
      *
@@ -31,7 +38,9 @@ class StockRequisitionService
      *         unit_cost: int|float|string,
      *         remarks?: string|null
      *     }>,
-     *     attachments?: list<UploadedFile>
+     *     attachments?: list<UploadedFile>,
+     *      noted_by_ids?: list<int>,
+     *     approved_by_ids: list<int>,
      * }  $data
      */
     public function create(User $requester, array $data): RequestForm
@@ -57,10 +66,27 @@ class StockRequisitionService
                 $attachments,
                 &$storedPaths
             ): RequestForm {
+                /*
+                * Recheck approver eligibility at submission time.
+                *
+                * The candidate list shown by the frontend may be stale because an
+                * administrator could change a role or assignment before submission.
+                */
+                $approvalPlan = $this->approvalChainResolver->resolve(
+                    requester: $requester,
+                    notedByIds: $data['noted_by_ids'] ?? [],
+                    approvedByIds: $data['approved_by_ids'],
+                );
+
                 $requestForm = $this->createRequestForm(
                     requester: $requester,
                     branch: $branch,
                     data: $data,
+                );
+
+                $this->storeApprovalSteps(
+                    requestForm: $requestForm,
+                    approvalPlan: $approvalPlan,
                 );
 
                 $grandTotal = '0.00';
@@ -115,6 +141,7 @@ class StockRequisitionService
                     'branch',
                     'items',
                     'attachments',
+                    'approvalSteps.approver',
                 ]);
             });
         } catch (Throwable $exception) {
@@ -204,6 +231,42 @@ class StockRequisitionService
         $requestForm->save();
 
         return $requestForm;
+    }
+
+    /**
+     * Save the resolved approvers in their required processing order.
+     *
+     * @param  list<array{
+     *     approver_id: int,
+     *     step_type: ApprovalStepType
+     * }>  $approvalPlan
+     */
+    private function storeApprovalSteps(
+        RequestForm $requestForm,
+        array $approvalPlan,
+    ): void {
+        foreach ($approvalPlan as $index => $resolvedStep) {
+            $approvalStep = new RequestApprovalStep;
+
+            /*
+            * Array indexes begin at zero, but approval levels begin at one.
+            */
+            $approvalStep->level = $index + 1;
+            $approvalStep->approver_id =
+                $resolvedStep['approver_id'];
+            $approvalStep->step_type =
+                $resolvedStep['step_type'];
+            $approvalStep->status =
+                ApprovalStepStatus::Pending;
+
+            /*
+            * Saving through the relationship automatically supplies the
+            * request_form_id foreign key.
+            */
+            $requestForm
+                ->approvalSteps()
+                ->save($approvalStep);
+        }
     }
 
     /**

@@ -3,8 +3,11 @@
 namespace App\Http\Requests\RequestForms;
 
 use App\Models\RequestForm;
+use App\Models\User;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
+use Illuminate\Validation\Validator;
 
 class StoreStockRequisitionRequest extends FormRequest
 {
@@ -37,6 +40,41 @@ class StoreStockRequisitionRequest extends FormRequest
                 'required',
                 'string',
                 'max:1000',
+            ],
+            /*
+            * Noted By is optional. If supplied, it must contain a small,
+            * ordered list of unique, existing user IDs.
+            */
+            'noted_by_ids' => [
+                'sometimes',
+                'array',
+                'max:10',
+            ],
+
+            'noted_by_ids.*' => [
+                'required',
+                'integer',
+                'distinct',
+                Rule::exists(User::class, 'id'),
+            ],
+
+            /*
+            * Every Stock Requisition needs at least one final approver.
+            *
+            * The order of this array becomes the approval-chain order.
+            */
+            'approved_by_ids' => [
+                'required',
+                'array',
+                'min:1',
+                'max:10',
+            ],
+
+            'approved_by_ids.*' => [
+                'required',
+                'integer',
+                'distinct',
+                Rule::exists(User::class, 'id'),
             ],
             'items' => [
                 'required',
@@ -113,6 +151,55 @@ class StoreStockRequisitionRequest extends FormRequest
             * Reject the singular field so the API has one unambiguous contract.
             */
             'attachment' => ['prohibited'],
+
+            /*
+            * The browser selects eligible users, but it must never construct
+            * approval-step database records or choose their status and level.
+            */
+            'approval_steps' => ['prohibited'],
+            'approver_id' => ['prohibited'],
+            'level' => ['prohibited'],
+            'step_type' => ['prohibited'],
+            'approval_status' => ['prohibited'],
+            'acted_at' => ['prohibited'],
+        ];
+    }
+
+    /**
+     * Perform validation that compares multiple input fields.
+     *
+     * @return array<int, callable>
+     */
+    public function after(): array
+    {
+        return [
+            function (Validator $validator): void {
+                $notedByIds = $this->input('noted_by_ids', []);
+                $approvedByIds = $this->input('approved_by_ids', []);
+
+                /*
+                * Leave malformed values to the normal array rules.
+                * This callback only handles valid array-shaped input.
+                */
+                if (
+                    ! is_array($notedByIds)
+                    || ! is_array($approvedByIds)
+                ) {
+                    return;
+                }
+
+                $overlappingIds = array_intersect(
+                    array_map('intval', $notedByIds),
+                    array_map('intval', $approvedByIds),
+                );
+
+                if ($overlappingIds !== []) {
+                    $validator->errors()->add(
+                        'approved_by_ids',
+                        'A user cannot be both Noted By and Approved By.',
+                    );
+                }
+            },
         ];
     }
 }
