@@ -66,4 +66,15 @@ class User extends Authenticatable
             BranchHeadAssignment::class, 'user_id'
         );
     }
+
+    /**
+     * Requests submitted by this user.
+     */
+    public function submittedRequests(): HasMany
+    {
+        return $this->hasMany(
+            RequestForm::class,
+            'requester_id'
+        );
+    }
 }
