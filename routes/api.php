@@ -132,11 +132,12 @@ Route::prefix('v1')->middleware('throttle:60,1')->group(function () {
         );
 
         /*
-        * User request submission endpoints.
-        *
-        * This route is authenticated here and authorized again by the
-        * StoreStockRequisitionRequest through RequestFormPolicy.
+        * User request endpoints.
         */
+        Route::get(
+            '/request-forms/approver-candidates',
+            [RequestFormController::class, 'approverCandidates']
+        )->middleware('throttle:30,1')->name('request-forms.approver-candidates.index');
         Route::post(
             '/request-forms/stock-requisitions',
             [RequestFormController::class, 'storeStockRequisition']

@@ -77,4 +77,15 @@ class User extends Authenticatable
             'requester_id'
         );
     }
+
+    /**
+     * Approval steps assigned to this user.
+     */
+    public function assignedApprovalSteps(): HasMany
+    {
+        return $this->hasMany(
+            RequestApprovalStep::class,
+            'approver_id'
+        );
+    }
 }

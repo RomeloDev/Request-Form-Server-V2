@@ -50,4 +50,13 @@ class RequestForm extends Model
     {
         return $this->hasMany(RequestAttachment::class);
     }
+
+    /**
+     * The ordered approval chain resolved when this request was submitted.
+     */
+    public function approvalSteps(): HasMany
+    {
+        return $this->hasMany(RequestApprovalStep::class)
+            ->orderBy('level');
+    }
 }
