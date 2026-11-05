@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\Admin;
 
+use App\Models\Branch;
 use App\Models\User;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
@@ -37,8 +38,12 @@ class UpdateUserRequest extends FormRequest
             'employee_id' => ['required', 'string', Rule::unique('users', 'employee_id')->ignore($target)],
             'position' => ['required', 'string'],
 
-            'branch_code' => ['nullable', 'string'],
-            'branch' => ['nullable', 'string'],
+            'branch_code' => [
+                'nullable',
+                'string',
+                Rule::exists(Branch::class, 'branch_code'),
+            ],
+            'branch' => ['prohibited'],
             'password' => ['nullable', 'string', 'min:6'],
             'profile_picture' => ['nullable', 'image'],
         ];

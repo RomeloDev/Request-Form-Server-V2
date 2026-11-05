@@ -137,7 +137,7 @@ Route::prefix('v1')->middleware('throttle:60,1')->group(function () {
         Route::get(
             '/request-forms/approver-candidates',
             [RequestFormController::class, 'approverCandidates']
-        )->middleware('throttle:30,1')->name('request-forms.approver-candidates.index');
+        )->name('request-forms.approver-candidates.index');
         Route::post(
             '/request-forms/stock-requisitions',
             [RequestFormController::class, 'storeStockRequisition']

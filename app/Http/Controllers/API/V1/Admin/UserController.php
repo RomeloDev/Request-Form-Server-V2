@@ -4,6 +4,7 @@ namespace App\Http\Controllers\API\V1\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\UpdateUserRequest;
+use App\Models\Branch;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Gate;
@@ -103,14 +104,23 @@ class UserController extends Controller
             'profile_picture',
         ]);
 
+        $branchCode = $data['branch_code'] ?? null;
+        unset($data['branch_code']);
+
+        $branch = $branchCode === null
+            ? null
+            : Branch::query()
+                ->where('branch_code', $branchCode)
+                ->firstOrFail();
+
         $newPicture = null;
 
         try {
             $user->fill($data);
 
-            // Missing optional fields become null, matching the reference code
-            $user->branch_code = $data['branch_code'] ?? null;
-            $user->branch = $data['branch'] ?? null;
+            // Keep the redundant company label consistent with its branch.
+            $user->branch_code = $branch?->branch_code;
+            $user->branch = $branch?->branch;
 
             // keep the rebuild's full name field consistent
             $user->name = trim(

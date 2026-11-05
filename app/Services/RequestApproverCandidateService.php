@@ -136,6 +136,13 @@ class RequestApproverCandidateService
                             'branch_code',
                             $branch->branch_code
                         )
+                        ->orWhere(
+                            function (Builder $query): void {
+                                $query
+                                    ->where('branch_code', 'HO')
+                                    ->where('branch', 'Head Office');
+                            }
+                        )
                         ->orWhereHas(
                             'branchHeadAssignment.branches',
                             function (Builder $query) use ($branch): void {

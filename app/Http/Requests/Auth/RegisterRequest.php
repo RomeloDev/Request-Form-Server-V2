@@ -2,11 +2,12 @@
 
 namespace App\Http\Requests\Auth;
 
+use App\Models\Branch;
 use Illuminate\Contracts\Validation\ValidationRule;
-use Illuminate\Foundation\Http\FormRequest;
-use Illuminate\Validation\Rule;
 use Illuminate\Contracts\Validation\Validator;
+use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Http\Exceptions\HttpResponseException;
+use Illuminate\Validation\Rule;
 use Override;
 
 class RegisterRequest extends FormRequest
@@ -30,8 +31,15 @@ class RegisterRequest extends FormRequest
             'firstName' => ['required', 'string', 'max:255'],
             'lastName' => ['required', 'string', 'max:255'],
             'contact' => ['required', 'string', 'max:255'],
-            'branch_code' => ['required', 'string', 'max:255', 'exists:branches,id'],
-            'branch' => ['required', 'string', 'max:255'],
+            'branch_code' => [
+                'required',
+                'string',
+                'max:255',
+                Rule::exists(Branch::class, 'branch_code'),
+            ],
+
+            /* Laravel derives the company from the selected branch code. */
+            'branch' => ['prohibited'],
             'userName' => [
                 'required', 'string', 'min:5', 'max:255',
                 'lowercase', 'alpha_dash', 'unique:users,userName',
@@ -44,7 +52,7 @@ class RegisterRequest extends FormRequest
                 Rule::exists('positions', 'value'),
             ],
             'signature' => ['required', 'image', 'mimes:png', 'max:3072'],
-                ];
+        ];
     }
 
     #[Override]

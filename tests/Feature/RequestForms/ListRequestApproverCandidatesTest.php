@@ -197,6 +197,104 @@ class ListRequestApproverCandidatesTest extends TestCase
         );
     }
 
+    public function test_head_office_approvers_are_global_except_delegated_avp_staff(): void
+    {
+        $requesterBranch = $this->branch('CALI');
+        $headOffice = $this->branch('HO', 'Head Office');
+        $otherBranch = $this->branch('OTHER');
+
+        $requester = $this->user(
+            branch: $requesterBranch,
+            role: 'User',
+            firstName: 'Requester',
+        );
+
+        /*
+         * Included: both Head Office identity fields match and the user
+         * has the approver role.
+         */
+        $globalApprover = $this->user(
+            branch: $headOffice,
+            role: 'approver',
+            firstName: 'GlobalApprover',
+        );
+
+        $avp = $this->user(
+            branch: $headOffice,
+            role: 'approver',
+            firstName: 'FinanceAVP',
+            position: 'AVP - Finance',
+        );
+
+        /*
+         * Excluded: an AVP Staff member is inserted automatically for
+         * assigned branches and must not be manually selectable, even
+         * when their own account belongs to Head Office.
+         */
+        $delegatedStaff = $this->user(
+            branch: $headOffice,
+            role: 'approver',
+            firstName: 'DelegatedStaff',
+            position: 'Accounting Staff',
+        );
+
+        $assignment = AvpStaffAssignment::create([
+            'avp_user_id' => $avp->id,
+            'staff_user_id' => $delegatedStaff->id,
+        ]);
+        $assignment->branches()->attach($requesterBranch->id);
+
+        /*
+         * Excluded: the global rule requires both branch_code = HO and
+         * branch = Head Office, not only one matching field.
+         */
+        $codeOnlyApprover = $this->user(
+            branch: $headOffice,
+            role: 'approver',
+            firstName: 'CodeOnly',
+        );
+        $codeOnlyApprover->forceFill([
+            'branch' => 'Different Company',
+        ])->save();
+
+        $companyOnlyApprover = $this->user(
+            branch: $otherBranch,
+            role: 'approver',
+            firstName: 'CompanyOnly',
+        );
+        $companyOnlyApprover->forceFill([
+            'branch' => 'Head Office',
+        ])->save();
+
+        Sanctum::actingAs($requester);
+
+        $response = $this->getJson(
+            '/api/v1/request-forms/approver-candidates?per_page=20'
+        )->assertOk();
+
+        $returnedIds = collect(
+            $response->json('data')
+        )->pluck('id')->all();
+
+        $this->assertContains(
+            $globalApprover->id,
+            $returnedIds,
+        );
+        $this->assertContains($avp->id, $returnedIds);
+        $this->assertNotContains(
+            $delegatedStaff->id,
+            $returnedIds,
+        );
+        $this->assertNotContains(
+            $codeOnlyApprover->id,
+            $returnedIds,
+        );
+        $this->assertNotContains(
+            $companyOnlyApprover->id,
+            $returnedIds,
+        );
+    }
+
     public function test_user_without_an_assigned_branch_cannot_list_candidates(): void
     {
         $requester = $this->user(
@@ -314,12 +412,14 @@ class ListRequestApproverCandidatesTest extends TestCase
             ->assertJsonMissingPath('data.0.contact');
     }
 
-    private function branch(string $code): Branch
-    {
+    private function branch(
+        string $code,
+        string $company = 'Test Company',
+    ): Branch {
         return Branch::factory()->create([
             'branch_code' => $code,
             'branch_name' => "{$code} Test Branch",
-            'branch' => 'Test Company',
+            'branch' => $company,
             'acronym' => $code,
         ]);
     }

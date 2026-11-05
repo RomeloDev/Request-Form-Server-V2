@@ -4,6 +4,7 @@ namespace App\Http\Controllers\API\V1\Auth;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Auth\RegisterRequest;
+use App\Models\Branch;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
@@ -18,6 +19,10 @@ class RegisterController extends Controller
     {
         $data = $request->validated();
 
+        $branch = Branch::query()
+            ->where('branch_code', $data['branch_code'])
+            ->firstOrFail();
+
         // A. Store the uploaded signature.
         $path = $request->file('signature')->store('signatures', 'public');
 
@@ -26,8 +31,8 @@ class RegisterController extends Controller
         }
 
         try {
-            // B. Create the user and token together
-            $result = DB::transaction(function () use ($data, $path) {
+            // B. Create the user with server-derived branch information.
+            $result = DB::transaction(function () use ($data, $path, $branch) {
                 $user = User::create([
                     'name' => trim(
                         $data['firstName'].' '.$data['lastName']
@@ -37,8 +42,8 @@ class RegisterController extends Controller
                     'email' => $data['email'],
                     'password' => Hash::make($data['password']),
                     'contact' => $data['contact'],
-                    'branch_code' => $data['branch_code'],
-                    'branch' => $data['branch'],
+                    'branch_code' => $branch->branch_code,
+                    'branch' => $branch->branch,
                     'position' => $data['position'],
                     'userName' => $data['userName'],
                     'employee_id' => $data['employee_id'],
@@ -47,16 +52,9 @@ class RegisterController extends Controller
 
                 $user->assignRole('User');
 
-                $token = $user->createToken(
-                    'API TOKEN',
-                    ['*'],
-                    now()->addMinutes(480)
-                );
-
                 return [
                     'status' => true,
                     'message' => 'Registered Successfully',
-                    'token' => $token->plainTextToken,
                 ];
             });
         } catch (Throwable $exception) {
