@@ -6,6 +6,7 @@ use App\Enums\RequestStatus;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\RequestForms\ListMyRequestsRequest;
 use App\Http\Requests\RequestForms\ListRequestApproverCandidatesRequest;
+use App\Http\Requests\RequestForms\ShowMyRequestRequest;
 use App\Http\Requests\RequestForms\StoreStockRequisitionRequest;
 use App\Http\Resources\RequestApproverCandidateResource;
 use App\Http\Resources\RequestFormResource;
@@ -133,5 +134,22 @@ class RequestFormController extends Controller
         $response->setStatusCode(Response::HTTP_CREATED);
 
         return $response;
+    }
+
+    public function show(ShowMyRequestRequest $request, RequestForm $requestForm): JsonResponse
+    {
+        $requestForm->load([
+            'requester',
+            'branch',
+            'items',
+            'attachments',
+            'approvalSteps.approver',
+        ]);
+
+        return (new RequestFormResource($requestForm))
+            ->additional([
+                'message' => 'Request retrieved successfully.',
+            ])
+            ->response();
     }
 }

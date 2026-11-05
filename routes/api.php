@@ -143,5 +143,10 @@ Route::prefix('v1')->middleware('throttle:60,1')->group(function () {
             [RequestFormController::class, 'storeStockRequisition']
         )->middleware('throttle:10,1')->name('request-forms.stock-requisitions.store');
         Route::get('/request-forms', [RequestFormController::class, 'index'])->name('request-forms.index');
+        Route::get('/request-forms/{requestForm}', [RequestFormController::class, 'show'])->missing(
+            fn () => response()->json([
+                'message' => 'Request not found.',
+            ], 404),
+        )->name('request-forms.show');
     });
 });

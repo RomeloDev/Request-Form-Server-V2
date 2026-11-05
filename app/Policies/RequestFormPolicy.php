@@ -24,7 +24,11 @@ class RequestFormPolicy
      */
     public function view(User $user, RequestForm $requestForm): bool
     {
-        return false;
+        return $user->hasAnyRole([
+            'Admin',
+            'User',
+            'approver',
+        ]) && (int) $requestForm->requester_id === (int) $user->getKey();
     }
 
     /**
