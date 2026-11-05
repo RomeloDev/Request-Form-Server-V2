@@ -12,7 +12,11 @@ class RequestFormPolicy
      */
     public function viewAny(User $user): bool
     {
-        return false;
+        return $user->hasAnyRole([
+            'Admin',
+            'User',
+            'approver',
+        ]);
     }
 
     /**
