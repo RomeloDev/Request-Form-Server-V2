@@ -16,6 +16,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
     'kind_of_request',
     'currency',
     'form_data',
+    'cancellation_reason',
 ])]
 class RequestForm extends Model
 {

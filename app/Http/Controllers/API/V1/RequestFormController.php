@@ -4,20 +4,39 @@ namespace App\Http\Controllers\API\V1;
 
 use App\Enums\RequestStatus;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\RequestForms\AccessRequestAttachmentRequest;
+use App\Http\Requests\RequestForms\CancelMyRequestRequest;
 use App\Http\Requests\RequestForms\ListMyRequestsRequest;
 use App\Http\Requests\RequestForms\ListRequestApproverCandidatesRequest;
 use App\Http\Requests\RequestForms\ShowMyRequestRequest;
 use App\Http\Requests\RequestForms\StoreStockRequisitionRequest;
 use App\Http\Resources\RequestApproverCandidateResource;
 use App\Http\Resources\RequestFormResource;
+use App\Models\RequestAttachment;
 use App\Models\RequestForm;
 use App\Services\RequestApproverCandidateService;
+use App\Services\RequestCancellationService;
 use App\Services\StockRequisitionService;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\Storage;
 use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class RequestFormController extends Controller
 {
+    private const PREVIEWABLE_MIME_TYPES = [
+        'application/pdf',
+        'image/jpeg',
+        'image/jpg',
+        'image/png',
+        'image/webp',
+    ];
+
+    private const DOWNLOADABLE_MIME_TYPES = [
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    ];
+
     public function index(ListMyRequestsRequest $request): JsonResponse
     {
         $filters = $request->validated();
@@ -149,6 +168,90 @@ class RequestFormController extends Controller
         return (new RequestFormResource($requestForm))
             ->additional([
                 'message' => 'Request retrieved successfully.',
+            ])
+            ->response();
+    }
+
+    public function previewAttachment(AccessRequestAttachmentRequest $request, RequestForm $requestForm, RequestAttachment $attachment): StreamedResponse
+    {
+        if (! in_array($attachment->mime_type, self::PREVIEWABLE_MIME_TYPES, true)) {
+            abort(
+                Response::HTTP_UNSUPPORTED_MEDIA_TYPE, 'This attachment type cannot be previewed.'
+            );
+        }
+
+        $disk = Storage::disk($attachment->disk);
+
+        if (! $disk->exists($attachment->path)) {
+            abort(
+                Response::HTTP_NOT_FOUND,
+                'Attachment file not found.'
+            );
+        }
+
+        return $disk->response(
+            $attachment->path,
+            $attachment->original_name,
+            [
+                'Content-Type' => $attachment->mime_type,
+                'Cache-Control' => 'private, no-store',
+                'X-Content-Type-Options' => 'nosniff',
+            ],
+            'inline',
+        );
+    }
+
+    public function downloadAttachment(
+        AccessRequestAttachmentRequest $request,
+        RequestForm $requestForm,
+        RequestAttachment $attachment,
+    ): StreamedResponse {
+        if (! in_array(
+            $attachment->mime_type,
+            self::DOWNLOADABLE_MIME_TYPES,
+            true,
+        )) {
+            abort(
+                Response::HTTP_UNSUPPORTED_MEDIA_TYPE,
+                'This attachment type cannot be downloaded here.',
+            );
+        }
+
+        $disk = Storage::disk($attachment->disk);
+
+        if (! $disk->exists($attachment->path)) {
+            abort(
+                Response::HTTP_NOT_FOUND,
+                'Attachment file not found.',
+            );
+        }
+
+        return $disk->download(
+            $attachment->path,
+            $attachment->original_name,
+            [
+                'Content-Type' => $attachment->mime_type,
+                'Cache-Control' => 'private, no-store',
+                'X-Content-Type-Options' => 'nosniff',
+            ],
+        );
+    }
+
+    public function cancel(
+        CancelMyRequestRequest $request,
+        RequestForm $requestForm,
+        RequestCancellationService $service,
+    ): JsonResponse {
+        $data = $request->validated();
+
+        $canceledRequest = $service->cancel(
+            requestForm: $requestForm,
+            reason: $data['cancellation_reason'],
+        );
+
+        return (new RequestFormResource($canceledRequest))
+            ->additional([
+                'message' => 'Request canceled successfully.',
             ])
             ->response();
     }

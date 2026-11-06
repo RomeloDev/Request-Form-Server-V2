@@ -31,6 +31,25 @@ class RequestFormPolicy
         ]) && (int) $requestForm->requester_id === (int) $user->getKey();
     }
 
+    public function viewAttachment(User $user, RequestForm $requestForm): bool
+    {
+        if (! $user->hasAnyRole([
+            'Admin',
+            'User',
+            'approver',
+        ])) {
+            return false;
+        }
+
+        if ((int) $requestForm->requester_id === (int) $user->getKey()) {
+            return true;
+        }
+
+        return $requestForm->approvalSteps()
+            ->where('approver_id', $user->getKey())
+            ->exists();
+    }
+
     /**
      * Determine whether the user can create models.
      */
@@ -73,5 +92,15 @@ class RequestFormPolicy
     public function forceDelete(User $user, RequestForm $requestForm): bool
     {
         return false;
+    }
+
+    public function cancel(User $user, RequestForm $requestForm): bool
+    {
+        return $user->hasAnyRole([
+            'Admin',
+            'User',
+            'approver',
+        ]) && (int) $requestForm->requester_id ===
+            (int) $user->getKey();
     }
 }

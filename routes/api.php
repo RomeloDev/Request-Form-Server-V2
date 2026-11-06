@@ -148,5 +148,25 @@ Route::prefix('v1')->middleware('throttle:60,1')->group(function () {
                 'message' => 'Request not found.',
             ], 404),
         )->name('request-forms.show');
+        Route::get(
+            '/request-forms/{requestForm}/attachments/{attachment}/preview',
+            [RequestFormController::class, 'previewAttachment']
+        )->scopeBindings()
+            ->name('request-forms.attachments.preview');
+        Route::get(
+            '/request-forms/{requestForm}/attachments/{attachment}/download',
+            [RequestFormController::class, 'downloadAttachment']
+        )->scopeBindings()
+            ->name('request-forms.attachments.download');
+        Route::patch(
+            '/request-forms/{requestForm}/cancel',
+            [RequestFormController::class, 'cancel'],
+        )
+            ->missing(
+                fn () => response()->json([
+                    'message' => 'Request not found.',
+                ], 404),
+            )
+            ->name('request-forms.cancel');
     });
 });

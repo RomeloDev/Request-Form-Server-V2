@@ -24,6 +24,7 @@ class RequestFormResource extends JsonResource
             'kind_of_request' => $this->kind_of_request,
             'currency' => $this->currency,
             'status' => $this->status->value,
+            'cancellation_reason' => $this->cancellation_reason,
             'form_data' => $this->form_data,
             'grand_total' => $this->grand_total,
 
