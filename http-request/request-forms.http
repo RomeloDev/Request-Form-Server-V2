@@ -148,7 +148,7 @@ X-XSRF-TOKEN: {{xsrfToken}}
   ],
   "items": [
     {
-      "quantity": "2.5",
+      "quantity": "2",
       "unit": "ream",
       "description": "A4 bond paper",
       "unit_cost": "100.20",
@@ -177,7 +177,7 @@ X-XSRF-TOKEN: {{xsrfToken}}
 #     "form_data": {
 #       "purpose": "Replace depleted office supplies."
 #     },
-#     "grand_total": "310.95",
+#     "grand_total": "260.85",
 #     "requester": {
 #       "id": 7,
 #       "firstname": "Learning",
@@ -195,11 +195,11 @@ X-XSRF-TOKEN: {{xsrfToken}}
 #       {
 #         "id": 80,
 #         "line_number": 1,
-#         "quantity": "2.500",
+#         "quantity": 2,
 #         "unit": "ream",
 #         "description": "A4 bond paper",
 #         "unit_cost": "100.20",
-#         "line_total": "250.50",
+#         "line_total": "200.40",
 #         "remarks": "For Accounting",
 #         "item_data": null
 #       }

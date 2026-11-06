@@ -2,9 +2,9 @@
 
 namespace App\Http\Requests\Admin;
 
+use App\Models\User;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
-use App\Models\User;
 use Illuminate\Validation\Rule;
 
 class ListApproversRequest extends FormRequest
@@ -25,11 +25,11 @@ class ListApproversRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'search' => ['nullable', 'string', 'max:100',],
-            'sort'=> ['nullable', Rule::in(['id', 'firstname', 'lastname', 'email', 'position', 'branch']),],
-            'direction'=> ['nullable', Rule::in(['asc', 'desc']),],
+            'search' => ['nullable', 'string', 'max:100'],
+            'sort' => ['nullable', Rule::in(['id', 'firstname', 'lastname', 'email', 'position', 'branch'])],
+            'direction' => ['nullable', Rule::in(['asc', 'desc'])],
             'page' => ['nullable', 'integer', 'min:1'],
-            'per_page'=> ['nullable', 'integer', Rule::in([10, 20, 50]),],
+            'per_page' => ['nullable', 'integer', Rule::in([10, 20, 50])],
         ];
     }
 }

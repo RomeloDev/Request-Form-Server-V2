@@ -88,7 +88,7 @@ class ShowMyRequestTest extends TestCase
         $requestForm = $this->requestForm($owner, $branch);
 
         $item = new RequestItem([
-            'quantity' => '2.000',
+            'quantity' => 2,
             'unit' => 'box',
             'description' => 'Bond paper',
             'unit_cost' => '125.00',

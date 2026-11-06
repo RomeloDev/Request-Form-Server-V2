@@ -12,11 +12,11 @@ class PositionController extends Controller
     {
         $positions = Position::orderBy(
             'label', 'asc'
-        )->get(['id','label', 'value']);
+        )->get(['id', 'label', 'value']);
 
         if ($positions->isEmpty()) {
             return response()->json([
-                "message" => "No position found",
+                'message' => 'No position found',
             ], 404);
         }
 

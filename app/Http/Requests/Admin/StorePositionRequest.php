@@ -27,10 +27,10 @@ class StorePositionRequest extends FormRequest
     public function rules(): array
     {
         return [
-            "value" => [
-                "required",
-                "string",
-                "max:255",
+            'value' => [
+                'required',
+                'string',
+                'max:255',
                 Rule::unique('positions', 'value'),
                 Rule::unique('positions', 'label'),
             ],

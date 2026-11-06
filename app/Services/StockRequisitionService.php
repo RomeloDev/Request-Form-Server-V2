@@ -32,7 +32,7 @@ class StockRequisitionService
      *     kind_of_request?: string|null,
      *     form_data: array{purpose: string},
      *     items: list<array{
-     *         quantity: int|float|string,
+     *         quantity: int|string,
      *         unit?: string|null,
      *         description: string,
      *         unit_cost: int|float|string,
@@ -92,13 +92,15 @@ class StockRequisitionService
                 $grandTotal = '0.00';
 
                 foreach ($data['items'] as $index => $itemData) {
+                    $quantity = (int) $itemData['quantity'];
+
                     $lineTotal = $this->calculateLineTotal(
-                        quantity: (string) $itemData['quantity'],
+                        quantity: $quantity,
                         unitCost: (string) $itemData['unit_cost'],
                     );
 
                     $item = new RequestItem([
-                        'quantity' => $itemData['quantity'],
+                        'quantity' => $quantity,
                         'unit' => $itemData['unit'] ?? null,
                         'description' => $itemData['description'],
                         'unit_cost' => $itemData['unit_cost'],
@@ -275,26 +277,12 @@ class StockRequisitionService
      * All values are non-negative because the Form Request validates them.
      */
     private function calculateLineTotal(
-        string $quantity,
+        int $quantity,
         string $unitCost,
     ): string {
-        /*
-         * Keep three decimal places before rounding because quantity may
-         * contain up to three decimal places.
-         */
-        $unroundedTotal = bcmul(
-            $quantity,
+        return bcmul(
+            (string) $quantity,
             $unitCost,
-            3,
-        );
-
-        /*
-         * Add half of one cent, then truncate to two decimal places.
-         * For non-negative values, this performs round-half-up.
-         */
-        return bcadd(
-            $unroundedTotal,
-            '0.005',
             2,
         );
     }

@@ -3,10 +3,10 @@
 namespace App\Http\Requests\Admin;
 
 use Illuminate\Contracts\Validation\ValidationRule;
-use Illuminate\Foundation\Http\FormRequest;
-use Illuminate\Validation\Rule;
 use Illuminate\Contracts\Validation\Validator;
+use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Http\Exceptions\HttpResponseException;
+use Illuminate\Validation\Rule;
 use Override;
 
 class UpdatePositionRequest extends FormRequest
@@ -26,13 +26,13 @@ class UpdatePositionRequest extends FormRequest
      */
     public function rules(): array
     {
-        $position = $this->route("position");
+        $position = $this->route('position');
 
         return [
-            "label" => [
-                "required",
-                "string",
-                "max:255",
+            'label' => [
+                'required',
+                'string',
+                'max:255',
                 Rule::unique('positions', 'label')->ignore($position),
             ],
         ];

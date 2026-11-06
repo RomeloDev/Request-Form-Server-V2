@@ -2,12 +2,12 @@
 
 namespace App\Http\Requests\Admin;
 
-use Illuminate\Contracts\Validation\ValidationRule;
-use Illuminate\Foundation\Http\FormRequest;
-use Illuminate\Validation\Rule;
-use Illuminate\Contracts\Validation\Validator;
-use Illuminate\Http\Exceptions\HttpResponseException;
 use App\Support\BranchAcronyms;
+use Illuminate\Contracts\Validation\ValidationRule;
+use Illuminate\Contracts\Validation\Validator;
+use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Http\Exceptions\HttpResponseException;
+use Illuminate\Validation\Rule;
 use Override;
 
 class UpdateBranchRequest extends FormRequest
@@ -33,12 +33,12 @@ class UpdateBranchRequest extends FormRequest
             is_string($company) ? $company : ''
         );
 
-        $branch = $this->route("branch");
+        $branch = $this->route('branch');
 
         return [
             'branch_code' => ['required', 'string', 'max:255', Rule::unique('branches', 'branch_code')->ignore($branch)],
             'branch_name' => ['required', 'string', 'max:150'],
-            'branch'=> ['required', 'string', 'max:255'],
+            'branch' => ['required', 'string', 'max:255'],
             'acronym' => [
                 'sometimes',
                 'required',

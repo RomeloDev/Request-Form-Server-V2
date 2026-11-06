@@ -88,10 +88,9 @@ class StoreStockRequisitionRequest extends FormRequest
             ],
             'items.*.quantity' => [
                 'required',
-                'numeric',
-                'gt:0',
-                'lte:100000',
-                'decimal:0,3',
+                'integer',
+                'min:1',
+                'max:100000',
             ],
             'items.*.unit' => [
                 'nullable',

@@ -126,8 +126,10 @@ class StoreStockRequisitionTest extends TestCase
             )
             ->assertJsonPath(
                 'data.grand_total',
-                '310.95',
+                '260.85',
             )
+            ->assertJsonPath('data.items.0.quantity', 2)
+            ->assertJsonPath('data.items.1.quantity', 3)
             ->assertJsonPath(
                 'data.requester.id',
                 $user->id,
@@ -204,7 +206,7 @@ class StoreStockRequisitionTest extends TestCase
         );
 
         $this->assertSame(
-            '310.95',
+            '260.85',
             $requestForm->grand_total,
         );
 
@@ -228,7 +230,7 @@ class StoreStockRequisitionTest extends TestCase
                 ->all(),
         );
         $this->assertSame(
-            '250.50',
+            '200.40',
             $requestForm->items[0]->line_total,
         );
         $this->assertSame(
@@ -399,9 +401,9 @@ class StoreStockRequisitionTest extends TestCase
      *
      * The expected calculations are:
      *
-     * 2.5 × 100.20 = 250.50
-     * 3   × 20.15  =  60.45
-     * Grand total  = 310.95
+     * 2 × 100.20 = 200.40
+     * 3 × 20.15  =  60.45
+     * Grand total = 260.85
      *
      * @return array<string, mixed>
      */
@@ -418,7 +420,7 @@ class StoreStockRequisitionTest extends TestCase
             'approved_by_ids' => $approvedByIds,
             'items' => [
                 [
-                    'quantity' => '2.5',
+                    'quantity' => '2',
                     'unit' => 'ream',
                     'description' => 'A4 bond paper',
                     'unit_cost' => '100.20',
@@ -690,5 +692,29 @@ class StoreStockRequisitionTest extends TestCase
             [],
             Storage::disk('local')->allFiles(),
         );
+    }
+
+    public function test_fractional_quantity_is_rejected(): void
+    {
+        $branch = $this->branch('TEST');
+        $user = $this->user($branch);
+        $approvedBy = $this->user($branch, 'approver');
+
+        Sanctum::actingAs($user);
+
+        $payload = $this->validPayload([$approvedBy->id]);
+        $payload['items'][0]['quantity'] = '2.5';
+
+        $this->postJson(
+            '/api/v1/request-forms/stock-requisitions',
+            $payload,
+        )
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors([
+                'items.0.quantity',
+            ]);
+
+        $this->assertDatabaseCount('request_forms', 0);
+        $this->assertDatabaseCount('request_items', 0);
     }
 }

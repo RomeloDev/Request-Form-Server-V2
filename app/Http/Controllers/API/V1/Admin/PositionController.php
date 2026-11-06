@@ -3,10 +3,9 @@
 namespace App\Http\Controllers\API\V1\Admin;
 
 use App\Http\Controllers\Controller;
-use App\Models\Position;
-use Illuminate\Http\Request;
 use App\Http\Requests\Admin\StorePositionRequest;
 use App\Http\Requests\Admin\UpdatePositionRequest;
+use App\Models\Position;
 use App\Models\User;
 
 class PositionController extends Controller
@@ -27,12 +26,12 @@ class PositionController extends Controller
         $data = $request->validated();
 
         $position = Position::create([
-            "label" => $data["value"],
-            "value" => $data["value"],
+            'label' => $data['value'],
+            'value' => $data['value'],
         ]);
 
         return response()->json([
-            "message" => "New position " . $position->value . " added successfully",
+            'message' => 'New position '.$position->value.' added successfully',
         ], 201);
     }
 
@@ -52,12 +51,12 @@ class PositionController extends Controller
         $data = $request->validated();
 
         $position->update([
-            "label"=> $data["label"],
+            'label' => $data['label'],
         ]);
 
         return response()->json([
-            "message"=> 'Position ' . $position->label
-            . ' updated successfully.',
+            'message' => 'Position '.$position->label
+            .' updated successfully.',
         ], 200);
 
     }
@@ -74,7 +73,7 @@ class PositionController extends Controller
 
         if ($isAssigned) {
             return response()->json([
-                'message'=> 'This position is assigned to users and cannot be deleted.',
+                'message' => 'This position is assigned to users and cannot be deleted.',
             ], 409);
         }
 
@@ -83,7 +82,7 @@ class PositionController extends Controller
         $position->delete();
 
         return response()->json([
-            'message'=> 'Position '. $position->label . ' deleted successfully.',
+            'message' => 'Position '.$position->label.' deleted successfully.',
         ], 200);
     }
 }

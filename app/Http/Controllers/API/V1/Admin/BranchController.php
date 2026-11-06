@@ -3,13 +3,12 @@
 namespace App\Http\Controllers\API\V1\Admin;
 
 use App\Http\Controllers\Controller;
-use App\Models\Branch;
-use Illuminate\Http\Request;
 use App\Http\Requests\Admin\StoreBranchRequest;
 use App\Http\Requests\Admin\UpdateBranchRequest;
-use Illuminate\Http\JsonResponse;
-use App\Support\BranchAcronyms;
+use App\Models\Branch;
 use App\Models\User;
+use App\Support\BranchAcronyms;
+use Illuminate\Http\JsonResponse;
 
 class BranchController extends Controller
 {
@@ -29,9 +28,9 @@ class BranchController extends Controller
         $data = $request->validated();
 
         $branch = Branch::create([
-            'branch_code'=> strtoupper($data['branch_code']),
-            'branch_name'=> strtoupper($data['branch_name']),
-            'branch'=> $data['branch'],
+            'branch_code' => strtoupper($data['branch_code']),
+            'branch_name' => strtoupper($data['branch_name']),
+            'branch' => $data['branch'],
             'acronym' => BranchAcronyms::resolve(
                 $data['branch'],
                 $data['acronym'] ?? null,
@@ -70,7 +69,7 @@ class BranchController extends Controller
 
         $branch->update([
             'branch_code' => $data['branch_code'],
-            'branch_name'=> strtoupper($data['branch_name']),
+            'branch_name' => strtoupper($data['branch_name']),
             'branch' => $data['branch'],
             'acronym' => $acronym,
         ]);
@@ -100,7 +99,7 @@ class BranchController extends Controller
         $branch->delete();
 
         return response()->json([
-            'message'=> 'Branch '. $branch->branch_code . ' deleted successfully.',
+            'message' => 'Branch '.$branch->branch_code.' deleted successfully.',
         ], 200);
     }
 }

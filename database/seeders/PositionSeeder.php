@@ -2,9 +2,8 @@
 
 namespace Database\Seeders;
 
-use Illuminate\Database\Console\Seeds\WithoutModelEvents;
-use Illuminate\Database\Seeder;
 use App\Models\Position;
+use Illuminate\Database\Seeder;
 
 class PositionSeeder extends Seeder
 {
@@ -33,7 +32,7 @@ class PositionSeeder extends Seeder
             'Auto Electrician',
             'AVP - Finance',
             'AVP - Sales & Marketing',
-            'Branch Manager'
+            'Branch Manager',
         ];
 
         foreach ($positions as $position) {

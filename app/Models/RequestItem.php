@@ -22,7 +22,7 @@ class RequestItem extends Model
     protected function casts(): array
     {
         return [
-            'quantity' => 'decimal:3',
+            'quantity' => 'integer',
             'unit_cost' => 'decimal:2',
             'line_total' => 'decimal:2',
             'item_data' => 'array',
