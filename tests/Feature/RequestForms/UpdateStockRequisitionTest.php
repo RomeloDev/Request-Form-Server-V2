@@ -12,6 +12,8 @@ use App\Models\RequestForm;
 use App\Models\RequestItem;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
 use Laravel\Sanctum\Sanctum;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Spatie\Permission\Models\Role;
@@ -315,8 +317,6 @@ class UpdateStockRequisitionTest extends TestCase
                 'status' => RequestStatus::Completed->value,
                 'grand_total' => '1.00',
                 'approval_steps' => [],
-                'attachments' => [],
-                'removed_attachment_ids' => [],
             ],
         )
             ->assertUnprocessable()
@@ -335,9 +335,168 @@ class UpdateStockRequisitionTest extends TestCase
                 'status',
                 'grand_total',
                 'approval_steps',
-                'attachments',
-                'removed_attachment_ids',
             ]);
+    }
+
+    public function test_owner_can_replace_an_existing_attachment(): void
+    {
+        Storage::fake('local');
+
+        $branch = $this->branch('REPLACE-FILE');
+        $owner = $this->user($branch);
+        $approver = $this->user($branch, 'approver');
+        $requestForm = $this->requestForm($owner, $branch);
+        $oldAttachment = $requestForm->attachments()->create([
+            'disk' => 'local',
+            'path' => "request-forms/{$requestForm->id}/old-quotation.pdf",
+            'original_name' => 'old-quotation.pdf',
+            'mime_type' => 'application/pdf',
+            'size_bytes' => 128,
+        ]);
+        Storage::disk('local')->put(
+            $oldAttachment->path,
+            'old quotation',
+        );
+
+        Sanctum::actingAs($owner);
+
+        $payload = $this->validPayload($requestForm, $approver);
+        $payload['_method'] = 'PATCH';
+        $payload['removed_attachment_ids'] = [$oldAttachment->id];
+        $payload['attachments'] = [
+            UploadedFile::fake()->create(
+                'replacement-quotation.pdf',
+                100,
+                'application/pdf',
+            ),
+        ];
+
+        $response = $this->post(
+            $this->updateUrl($requestForm),
+            $payload,
+            ['Accept' => 'application/json'],
+        );
+
+        $response
+            ->assertOk()
+            ->assertJsonPath(
+                'message',
+                'Stock Requisition updated successfully.',
+            )
+            ->assertJsonCount(1, 'data.attachments')
+            ->assertJsonPath(
+                'data.attachments.0.original_name',
+                'replacement-quotation.pdf',
+            );
+
+        $this->assertDatabaseMissing('request_attachments', [
+            'id' => $oldAttachment->id,
+        ]);
+        Storage::disk('local')->assertMissing($oldAttachment->path);
+
+        $replacement = $requestForm
+            ->attachments()
+            ->where('original_name', 'replacement-quotation.pdf')
+            ->sole();
+
+        Storage::disk('local')->assertExists($replacement->path);
+    }
+
+    public function test_attachment_from_another_request_cannot_be_removed(): void
+    {
+        Storage::fake('local');
+
+        $branch = $this->branch('FOREIGN-FILE');
+        $owner = $this->user($branch);
+        $approver = $this->user($branch, 'approver');
+        $requestForm = $this->requestForm($owner, $branch);
+        $otherRequest = $this->requestForm($owner, $branch);
+        $foreignAttachment = $otherRequest->attachments()->create([
+            'disk' => 'local',
+            'path' => "request-forms/{$otherRequest->id}/private.pdf",
+            'original_name' => 'private.pdf',
+            'mime_type' => 'application/pdf',
+            'size_bytes' => 128,
+        ]);
+        Storage::disk('local')->put(
+            $foreignAttachment->path,
+            'private contents',
+        );
+
+        Sanctum::actingAs($owner);
+
+        $payload = $this->validPayload($requestForm, $approver);
+        $payload['_method'] = 'PATCH';
+        $payload['removed_attachment_ids'] = [
+            $foreignAttachment->id,
+        ];
+
+        $this->post(
+            $this->updateUrl($requestForm),
+            $payload,
+            ['Accept' => 'application/json'],
+        )
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors([
+                'removed_attachment_ids.0',
+            ]);
+
+        $this->assertDatabaseHas('request_attachments', [
+            'id' => $foreignAttachment->id,
+            'request_form_id' => $otherRequest->id,
+        ]);
+        Storage::disk('local')->assertExists(
+            $foreignAttachment->path,
+        );
+    }
+
+    public function test_total_retained_and_new_attachments_cannot_exceed_ten(): void
+    {
+        Storage::fake('local');
+
+        $branch = $this->branch('FILE-LIMIT');
+        $owner = $this->user($branch);
+        $approver = $this->user($branch, 'approver');
+        $requestForm = $this->requestForm($owner, $branch);
+
+        foreach (range(1, 10) as $number) {
+            $requestForm->attachments()->create([
+                'disk' => 'local',
+                'path' => "request-forms/{$requestForm->id}/file-{$number}.pdf",
+                'original_name' => "file-{$number}.pdf",
+                'mime_type' => 'application/pdf',
+                'size_bytes' => 128,
+            ]);
+        }
+
+        Sanctum::actingAs($owner);
+
+        $payload = $this->validPayload($requestForm, $approver);
+        $payload['_method'] = 'PATCH';
+        $payload['attachments'] = [
+            UploadedFile::fake()->create(
+                'eleventh.pdf',
+                100,
+                'application/pdf',
+            ),
+        ];
+
+        $this->post(
+            $this->updateUrl($requestForm),
+            $payload,
+            ['Accept' => 'application/json'],
+        )
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['attachments'])
+            ->assertJsonPath(
+                'errors.attachments.0',
+                'A request can have no more than 10 attachments.',
+            );
+
+        $this->assertDatabaseCount('request_attachments', 10);
+        Storage::disk('local')->assertDirectoryEmpty(
+            "request-forms/{$requestForm->id}",
+        );
     }
 
     public function test_missing_request_returns_custom_not_found_response(): void

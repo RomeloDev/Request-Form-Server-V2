@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\RequestForms;
 
+use App\Models\RequestAttachment;
 use App\Models\RequestForm;
 use App\Models\User;
 use Illuminate\Contracts\Validation\ValidationRule;
@@ -29,6 +30,10 @@ class UpdateStockRequisitionRequest extends FormRequest
      */
     public function rules(): array
     {
+        $requestForm = $this->route('requestForm');
+
+        $requestFormId = $requestForm instanceof RequestForm ? $requestForm->getKey() : 0;
+
         return [
             'updated_at' => ['required', 'date'],
             'kind_of_request' => [
@@ -118,8 +123,6 @@ class UpdateStockRequisitionRequest extends FormRequest
             'items.*.line_number' => ['prohibited'],
             'items.*.line_total' => ['prohibited'],
 
-            'attachments' => ['missing'],
-            'removed_attachment_ids' => ['missing'],
             'attachment' => ['missing'],
             'approval_steps' => ['missing'],
             'approver_id' => ['prohibited'],
@@ -127,6 +130,36 @@ class UpdateStockRequisitionRequest extends FormRequest
             'step_type' => ['prohibited'],
             'approval_status' => ['prohibited'],
             'acted_at' => ['prohibited'],
+
+            'attachments' => [
+                'sometimes',
+                'array',
+                'max:10',
+            ],
+            'attachments.*' => [
+                'required',
+                'file',
+                'mimes:pdf,jpg,jpeg,png,webp,docx,xlsx',
+                'max:5120',
+            ],
+            'removed_attachment_ids' => [
+                'sometimes',
+                'array',
+                'max:10',
+            ],
+
+            'removed_attachment_ids.*' => [
+                'required',
+                'integer',
+                'distinct',
+                Rule::exists(RequestAttachment::class, 'id')
+                    ->where(
+                        fn ($query) => $query->where(
+                            'request_form_id',
+                            $requestFormId,
+                        ),
+                    ),
+            ],
         ];
     }
 
@@ -158,6 +191,41 @@ class UpdateStockRequisitionRequest extends FormRequest
                     $validator->errors()->add(
                         'approved_by_ids',
                         'A user cannot be both Noted By and Approved By.',
+                    );
+                }
+            },
+
+            function (Validator $validator): void {
+                if (
+                    $validator->errors()->has('attachments')
+                    || $validator->errors()->has('attachments.*')
+                    || $validator->errors()->has('removed_attachment_ids')
+                    || $validator->errors()->has('removed_attachment_ids.*')
+                ) {
+                    return;
+                }
+
+                $requestForm = $this->route('requestForm');
+                $removedIds = $this->input('removed_attachment_ids', []);
+                $newFiles = $this->file('attachments', []);
+
+                if (
+                    ! $requestForm instanceof RequestForm
+                    || ! is_array($removedIds)
+                    || ! is_array($newFiles)
+                ) {
+                    return;
+                }
+
+                $retainedCount = $requestForm
+                    ->attachments()
+                    ->whereNotIn('id', $removedIds)
+                    ->count();
+
+                if ($retainedCount + count($newFiles) > 10) {
+                    $validator->errors()->add(
+                        'attachments',
+                        'A request can have no more than 10 attachments.',
                     );
                 }
             },

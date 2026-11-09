@@ -351,7 +351,9 @@ class StockRequisitionService
      *         description: string,
      *         unit_cost: int|float|string,
      *         remarks?: string|null
-     *     }>
+     *     }>,
+     *      attachments?: list<UploadedFile>,
+     *      removed_attachment_ids?: list<int>,
      * }  $data
      */
     public function update(
@@ -359,187 +361,287 @@ class StockRequisitionService
         User $requester,
         array $data,
     ): RequestForm {
-        return DB::transaction(
-            function () use (
-                $requestForm,
-                $requester,
-                $data,
-            ): RequestForm {
-                /*
-                * Reload and lock the current database record.
-                *
-                * The model created by route binding may already be stale.
-                */
-                $lockedRequest = RequestForm::query()
-                    ->lockForUpdate()
-                    ->findOrFail($requestForm->getKey());
+        /** @var list<UploadedFile> $newAttachments */
+        $newAttachments = $data['attachments'] ?? [];
 
-                if (
-                    $lockedRequest->form_type !==
-                    RequestFormType::StockRequisition
-                ) {
-                    throw new ConflictHttpException(
-                        'Only Stock Requisition requests can be edited.',
-                    );
-                }
+        $removedAttachmentIds = array_map(
+            'intval',
+            $data['removed_attachment_ids'] ?? [],
+        );
 
-                if (
-                    ! in_array(
-                        $lockedRequest->status,
-                        [
-                            RequestStatus::Pending,
-                            RequestStatus::Disapproved,
-                        ],
-                        true,
-                    )
-                ) {
-                    throw new ConflictHttpException(
-                        'Only pending or disapproved requests can be edited.',
-                    );
-                }
+        /*
+        * New files must be deleted if the database transaction fails.
+        */
+        $storedPaths = [];
 
-                /*
-                * Reject a stale browser copy.
-                *
-                * This prevents one tab from overwriting changes made through
-                * another tab or request.
-                */
-                $expectedUpdatedAt = CarbonImmutable::parse(
-                    $data['updated_at'],
-                );
+        /*
+        * Old files must only be physically deleted after the database commits.
+        *
+        * @var list<array{disk: string, path: string}>
+        */
+        $removedFiles = [];
 
-                if (
-                    $lockedRequest->updated_at === null
-                    || ! $lockedRequest->updated_at->equalTo(
-                        $expectedUpdatedAt,
-                    )
-                ) {
-                    throw new ConflictHttpException(
-                        'This request has changed since you opened it. Refresh and try again.',
-                    );
-                }
+        try {
+            $updatedRequest = DB::transaction(
+                function () use (
+                    $requestForm,
+                    $requester,
+                    $data,
+                    $newAttachments,
+                    $removedAttachmentIds,
+                    &$storedPaths,
+                    &$removedFiles,
+                ): RequestForm {
+                    /*
+                    * Reload and lock the current database record.
+                    *
+                    * The model created by route binding may already be stale.
+                    */
+                    $lockedRequest = RequestForm::query()
+                        ->lockForUpdate()
+                        ->findOrFail($requestForm->getKey());
 
-                /*
-                * Lock approval rows after locking the parent request.
-                * All approval-related services should use this lock order.
-                */
-                $existingSteps = $lockedRequest
-                    ->approvalSteps()
-                    ->lockForUpdate()
-                    ->get();
-
-                /*
-                * An untouched Pending request may be edited.
-                *
-                * A Disapproved request is handled as an intentional
-                * resubmission, so its old approval activity may be replaced.
-                */
-                if ($lockedRequest->status === RequestStatus::Pending) {
-                    $hasApprovalActivity = $existingSteps->contains(
-                        fn (RequestApprovalStep $step): bool => $step->status !== ApprovalStepStatus::Pending
-                            || $step->acted_at !== null,
-                    );
-
-                    if ($hasApprovalActivity) {
+                    if (
+                        $lockedRequest->form_type !==
+                        RequestFormType::StockRequisition
+                    ) {
                         throw new ConflictHttpException(
-                            'A pending request cannot be edited after approval activity has started.',
+                            'Only Stock Requisition requests can be edited.',
                         );
                     }
-                }
 
-                /*
-                * Revalidate approver eligibility at update time.
-                *
-                * Roles and branch assignments may have changed since the
-                * browser originally loaded the request.
-                */
-                $approvalPlan = $this->approvalChainResolver->resolve(
-                    requester: $requester,
-                    notedByIds: $data['noted_by_ids'] ?? [],
-                    approvedByIds: $data['approved_by_ids'],
-                );
+                    $existingAttachments = $lockedRequest
+                        ->attachments()
+                        ->lockForUpdate()
+                        ->get();
 
-                /*
-                * Update only requester-editable parent fields.
-                *
-                * Request code, requester, branch, form type, and currency
-                * remain server-controlled and unchanged.
-                */
-                $lockedRequest->kind_of_request =
-                    $data['kind_of_request'] ?? null;
+                    $attachmentsToRemove = $existingAttachments
+                        ->whereIn('id', $removedAttachmentIds);
 
-                $lockedRequest->form_data = [
-                    'purpose' => $data['form_data']['purpose'],
-                ];
+                    if (
+                        $attachmentsToRemove->count()
+                        !== count($removedAttachmentIds)
+                    ) {
+                        throw ValidationException::withMessages([
+                            'removed_attachment_ids' => 'One or more selected attachments no longer belong to this request.',
+                        ]);
+                    }
 
-                /*
-                * Replace the item collection.
-                *
-                * Item IDs are not accepted from the browser, preventing a
-                * user from attaching another request's item.
-                */
-                $lockedRequest->items()->delete();
+                    $finalAttachmentCount =
+                        $existingAttachments->count()
+                        - $attachmentsToRemove->count()
+                        + count($newAttachments);
 
-                $grandTotal = '0.00';
+                    if ($finalAttachmentCount > 10) {
+                        throw ValidationException::withMessages([
+                            'attachments' => 'A request can have no more than 10 attachments.',
+                        ]);
+                    }
 
-                foreach ($data['items'] as $index => $itemData) {
-                    $quantity = (int) $itemData['quantity'];
-
-                    $lineTotal = $this->calculateLineTotal(
-                        quantity: $quantity,
-                        unitCost: (string) $itemData['unit_cost'],
-                    );
-
-                    $item = new RequestItem([
-                        'quantity' => $quantity,
-                        'description' => $itemData['description'],
-                        'unit_cost' => $itemData['unit_cost'],
-                        'remarks' => $itemData['remarks'] ?? null,
-                    ]);
+                    if (
+                        ! in_array(
+                            $lockedRequest->status,
+                            [
+                                RequestStatus::Pending,
+                                RequestStatus::Disapproved,
+                            ],
+                            true,
+                        )
+                    ) {
+                        throw new ConflictHttpException(
+                            'Only pending or disapproved requests can be edited.',
+                        );
+                    }
 
                     /*
-                    * Laravel controls the ordering and calculated amount.
+                    * Reject a stale browser copy.
+                    *
+                    * This prevents one tab from overwriting changes made through
+                    * another tab or request.
                     */
-                    $item->line_number = $index + 1;
-                    $item->line_total = $lineTotal;
-
-                    $lockedRequest->items()->save($item);
-
-                    $grandTotal = bcadd(
-                        $grandTotal,
-                        $lineTotal,
-                        2,
+                    $expectedUpdatedAt = CarbonImmutable::parse(
+                        $data['updated_at'],
                     );
-                }
 
-                /*
-                * Replace the old approval chain with the newly resolved one.
-                */
-                $lockedRequest->approvalSteps()->delete();
+                    if (
+                        $lockedRequest->updated_at === null
+                        || ! $lockedRequest->updated_at->equalTo(
+                            $expectedUpdatedAt,
+                        )
+                    ) {
+                        throw new ConflictHttpException(
+                            'This request has changed since you opened it. Refresh and try again.',
+                        );
+                    }
 
-                $this->storeApprovalSteps(
-                    requestForm: $lockedRequest,
-                    approvalPlan: $approvalPlan,
-                );
+                    /*
+                    * Lock approval rows after locking the parent request.
+                    * All approval-related services should use this lock order.
+                    */
+                    $existingSteps = $lockedRequest
+                        ->approvalSteps()
+                        ->lockForUpdate()
+                        ->get();
 
-                /*
-                * Editing a Disapproved request is a resubmission.
-                */
-                $lockedRequest->grand_total = $grandTotal;
-                $lockedRequest->status = RequestStatus::Pending;
-                $lockedRequest->save();
+                    /*
+                    * An untouched Pending request may be edited.
+                    *
+                    * A Disapproved request is handled as an intentional
+                    * resubmission, so its old approval activity may be replaced.
+                    */
+                    if ($lockedRequest->status === RequestStatus::Pending) {
+                        $hasApprovalActivity = $existingSteps->contains(
+                            fn (RequestApprovalStep $step): bool => $step->status !== ApprovalStepStatus::Pending
+                                || $step->acted_at !== null,
+                        );
 
-                /*
-                * Existing attachments remain associated with the request.
-                */
-                return $lockedRequest->refresh()->load([
-                    'requester',
-                    'branch',
-                    'items',
-                    'attachments',
-                    'approvalSteps.approver',
-                ]);
-            },
-        );
+                        if ($hasApprovalActivity) {
+                            throw new ConflictHttpException(
+                                'A pending request cannot be edited after approval activity has started.',
+                            );
+                        }
+                    }
+
+                    /*
+                    * Revalidate approver eligibility at update time.
+                    *
+                    * Roles and branch assignments may have changed since the
+                    * browser originally loaded the request.
+                    */
+                    $approvalPlan = $this->approvalChainResolver->resolve(
+                        requester: $requester,
+                        notedByIds: $data['noted_by_ids'] ?? [],
+                        approvedByIds: $data['approved_by_ids'],
+                    );
+
+                    /*
+                    * Update only requester-editable parent fields.
+                    *
+                    * Request code, requester, branch, form type, and currency
+                    * remain server-controlled and unchanged.
+                    */
+                    $lockedRequest->kind_of_request =
+                        $data['kind_of_request'] ?? null;
+
+                    $lockedRequest->form_data = [
+                        'purpose' => $data['form_data']['purpose'],
+                    ];
+
+                    /*
+                    * Replace the item collection.
+                    *
+                    * Item IDs are not accepted from the browser, preventing a
+                    * user from attaching another request's item.
+                    */
+                    $lockedRequest->items()->delete();
+
+                    $grandTotal = '0.00';
+
+                    foreach ($data['items'] as $index => $itemData) {
+                        $quantity = (int) $itemData['quantity'];
+
+                        $lineTotal = $this->calculateLineTotal(
+                            quantity: $quantity,
+                            unitCost: (string) $itemData['unit_cost'],
+                        );
+
+                        $item = new RequestItem([
+                            'quantity' => $quantity,
+                            'description' => $itemData['description'],
+                            'unit_cost' => $itemData['unit_cost'],
+                            'remarks' => $itemData['remarks'] ?? null,
+                        ]);
+
+                        /*
+                        * Laravel controls the ordering and calculated amount.
+                        */
+                        $item->line_number = $index + 1;
+                        $item->line_total = $lineTotal;
+
+                        $lockedRequest->items()->save($item);
+
+                        $grandTotal = bcadd(
+                            $grandTotal,
+                            $lineTotal,
+                            2,
+                        );
+                    }
+
+                    /*
+                    * Replace the old approval chain with the newly resolved one.
+                    */
+                    $lockedRequest->approvalSteps()->delete();
+
+                    $this->storeApprovalSteps(
+                        requestForm: $lockedRequest,
+                        approvalPlan: $approvalPlan,
+                    );
+
+                    /*
+                    * Editing a Disapproved request is a resubmission.
+                    */
+                    $lockedRequest->grand_total = $grandTotal;
+                    $lockedRequest->status = RequestStatus::Pending;
+                    $lockedRequest->save();
+
+                    foreach ($newAttachments as $file) {
+                        $this->storeAttachment(
+                            requestForm: $lockedRequest,
+                            file: $file,
+                            storedPaths: $storedPaths,
+                        );
+                    }
+
+                    $removedFiles = $attachmentsToRemove
+                        ->map(
+                            fn ($attachment): array => [
+                                'disk' => $attachment->disk,
+                                'path' => $attachment->path,
+                            ],
+                        )
+                        ->values()
+                        ->all();
+
+                    if ($removedAttachmentIds !== []) {
+                        $lockedRequest
+                            ->attachments()
+                            ->whereKey($removedAttachmentIds)
+                            ->delete();
+                    }
+
+                    /*
+                    * Existing attachments remain associated with the request.
+                    */
+                    return $lockedRequest->refresh()->load([
+                        'requester',
+                        'branch',
+                        'items',
+                        'attachments',
+                        'approvalSteps.approver',
+                    ]);
+                },
+            );
+        } catch (Throwable $exception) {
+            /*
+            * The database rollback removes the new metadata, but not the newly
+            * stored physical files.
+            */
+            if ($storedPaths !== []) {
+                Storage::disk('local')->delete($storedPaths);
+            }
+
+            throw $exception;
+        }
+
+        /*
+        * The database has committed successfully. It is now safe to remove the
+        * physical files whose metadata was deleted.
+        */
+        foreach ($removedFiles as $removedFile) {
+            Storage::disk($removedFile['disk'])
+                ->delete($removedFile['path']);
+        }
+
+        return $updatedRequest;
     }
 }

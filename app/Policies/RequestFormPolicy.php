@@ -100,7 +100,11 @@ class RequestFormPolicy
      */
     public function delete(User $user, RequestForm $requestForm): bool
     {
-        return false;
+        return $user->hasAnyRole([
+            'Admin',
+            'User',
+            'approver',
+        ]) && (int) $user->getKey() === (int) $requestForm->requester_id;
     }
 
     /**

@@ -193,5 +193,15 @@ Route::prefix('v1')->middleware('throttle:60,1')->group(function () {
                     'message' => 'Request not found.',
                 ], 404),
             )->name('request-forms.stock-requisitions.update');
+        Route::delete(
+            '/request-forms/{requestForm}',
+            [RequestFormController::class, 'destroy'],
+        )
+            ->middleware('throttle:10,1')
+            ->missing(
+                fn () => response()->json([
+                    'message' => 'Request not found.',
+                ], 404),
+            )->name('request-forms.destroy');
     });
 });

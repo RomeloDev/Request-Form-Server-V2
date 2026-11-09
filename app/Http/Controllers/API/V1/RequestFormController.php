@@ -7,6 +7,7 @@ use App\Enums\RequestStatus;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\RequestForms\AccessRequestAttachmentRequest;
 use App\Http\Requests\RequestForms\CancelMyRequestRequest;
+use App\Http\Requests\RequestForms\DeleteMyRequestRequest;
 use App\Http\Requests\RequestForms\ListMyRequestsRequest;
 use App\Http\Requests\RequestForms\ListRequestApproverCandidatesRequest;
 use App\Http\Requests\RequestForms\ShowMyRequestRequest;
@@ -22,6 +23,7 @@ use App\Models\RequestForm;
 use App\Models\User;
 use App\Services\RequestApproverCandidateService;
 use App\Services\RequestCancellationService;
+use App\Services\RequestDeletionService;
 use App\Services\StockRequisitionService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Storage;
@@ -356,5 +358,20 @@ class RequestFormController extends Controller
                 'message' => 'Stock Requisition updated successfully.',
             ])
             ->response();
+    }
+
+    public function destroy(
+        DeleteMyRequestRequest $request,
+        RequestForm $requestForm,
+        RequestDeletionService $service,
+    ): JsonResponse {
+        $deletedRequestId = $service->delete($requestForm);
+
+        return response()->json([
+            'message' => 'Request deleted successfully.',
+            'data' => [
+                'id' => $deletedRequestId,
+            ],
+        ]);
     }
 }
