@@ -9,7 +9,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 #[Fillable([
     'quantity',
-    //'unit',
+    // 'unit',
     'description',
     'unit_cost',
     'remarks',

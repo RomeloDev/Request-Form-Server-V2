@@ -184,5 +184,14 @@ Route::prefix('v1')->middleware('throttle:60,1')->group(function () {
                 'message' => 'Request or signature not found.',
             ], 404),
         )->name('request-forms.print.signatures.show');
+        Route::patch(
+            '/request-forms/{requestForm}/stock-requisition',
+            [RequestFormController::class, 'updateStockRequisition'],
+        )->middleware('throttle:10,1')
+            ->missing(
+                fn () => response()->json([
+                    'message' => 'Request not found.',
+                ], 404),
+            )->name('request-forms.stock-requisitions.update');
     });
 });

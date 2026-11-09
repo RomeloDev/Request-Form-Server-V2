@@ -84,7 +84,7 @@ class StoreStockRequisitionRequest extends FormRequest
             ],
             'items.*' => [
                 'required',
-                'array:quantity,unit,description,unit_cost,remarks',
+                'array:quantity,description,unit_cost,remarks',
             ],
             'items.*.quantity' => [
                 'required',

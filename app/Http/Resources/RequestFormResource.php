@@ -61,7 +61,7 @@ class RequestFormResource extends JsonResource
                             'id' => $item->id,
                             'line_number' => $item->line_number,
                             'quantity' => $item->quantity,
-                            //'unit' => $item->unit,
+                            // 'unit' => $item->unit,
                             'description' => $item->description,
                             'unit_cost' => $item->unit_cost,
                             'line_total' => $item->line_total,

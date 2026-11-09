@@ -11,12 +11,14 @@ use App\Models\RequestApprovalStep;
 use App\Models\RequestForm;
 use App\Models\RequestItem;
 use App\Models\User;
+use Carbon\CarbonImmutable;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use RuntimeException;
+use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
 use Throwable;
 
 class StockRequisitionService
@@ -331,5 +333,213 @@ class StockRequisitionService
 
             'size_bytes' => (int) $file->getSize(),
         ]);
+    }
+
+    /**
+     * Update and resubmit an existing Stock Requisition.
+     *
+     * Existing attachments are intentionally retained unchanged.
+     *
+     * @param  array{
+     *     updated_at: string,
+     *     kind_of_request?: string|null,
+     *     form_data: array{purpose: string},
+     *     noted_by_ids?: list<int>,
+     *     approved_by_ids: list<int>,
+     *     items: list<array{
+     *         quantity: int|string,
+     *         description: string,
+     *         unit_cost: int|float|string,
+     *         remarks?: string|null
+     *     }>
+     * }  $data
+     */
+    public function update(
+        RequestForm $requestForm,
+        User $requester,
+        array $data,
+    ): RequestForm {
+        return DB::transaction(
+            function () use (
+                $requestForm,
+                $requester,
+                $data,
+            ): RequestForm {
+                /*
+                * Reload and lock the current database record.
+                *
+                * The model created by route binding may already be stale.
+                */
+                $lockedRequest = RequestForm::query()
+                    ->lockForUpdate()
+                    ->findOrFail($requestForm->getKey());
+
+                if (
+                    $lockedRequest->form_type !==
+                    RequestFormType::StockRequisition
+                ) {
+                    throw new ConflictHttpException(
+                        'Only Stock Requisition requests can be edited.',
+                    );
+                }
+
+                if (
+                    ! in_array(
+                        $lockedRequest->status,
+                        [
+                            RequestStatus::Pending,
+                            RequestStatus::Disapproved,
+                        ],
+                        true,
+                    )
+                ) {
+                    throw new ConflictHttpException(
+                        'Only pending or disapproved requests can be edited.',
+                    );
+                }
+
+                /*
+                * Reject a stale browser copy.
+                *
+                * This prevents one tab from overwriting changes made through
+                * another tab or request.
+                */
+                $expectedUpdatedAt = CarbonImmutable::parse(
+                    $data['updated_at'],
+                );
+
+                if (
+                    $lockedRequest->updated_at === null
+                    || ! $lockedRequest->updated_at->equalTo(
+                        $expectedUpdatedAt,
+                    )
+                ) {
+                    throw new ConflictHttpException(
+                        'This request has changed since you opened it. Refresh and try again.',
+                    );
+                }
+
+                /*
+                * Lock approval rows after locking the parent request.
+                * All approval-related services should use this lock order.
+                */
+                $existingSteps = $lockedRequest
+                    ->approvalSteps()
+                    ->lockForUpdate()
+                    ->get();
+
+                /*
+                * An untouched Pending request may be edited.
+                *
+                * A Disapproved request is handled as an intentional
+                * resubmission, so its old approval activity may be replaced.
+                */
+                if ($lockedRequest->status === RequestStatus::Pending) {
+                    $hasApprovalActivity = $existingSteps->contains(
+                        fn (RequestApprovalStep $step): bool => $step->status !== ApprovalStepStatus::Pending
+                            || $step->acted_at !== null,
+                    );
+
+                    if ($hasApprovalActivity) {
+                        throw new ConflictHttpException(
+                            'A pending request cannot be edited after approval activity has started.',
+                        );
+                    }
+                }
+
+                /*
+                * Revalidate approver eligibility at update time.
+                *
+                * Roles and branch assignments may have changed since the
+                * browser originally loaded the request.
+                */
+                $approvalPlan = $this->approvalChainResolver->resolve(
+                    requester: $requester,
+                    notedByIds: $data['noted_by_ids'] ?? [],
+                    approvedByIds: $data['approved_by_ids'],
+                );
+
+                /*
+                * Update only requester-editable parent fields.
+                *
+                * Request code, requester, branch, form type, and currency
+                * remain server-controlled and unchanged.
+                */
+                $lockedRequest->kind_of_request =
+                    $data['kind_of_request'] ?? null;
+
+                $lockedRequest->form_data = [
+                    'purpose' => $data['form_data']['purpose'],
+                ];
+
+                /*
+                * Replace the item collection.
+                *
+                * Item IDs are not accepted from the browser, preventing a
+                * user from attaching another request's item.
+                */
+                $lockedRequest->items()->delete();
+
+                $grandTotal = '0.00';
+
+                foreach ($data['items'] as $index => $itemData) {
+                    $quantity = (int) $itemData['quantity'];
+
+                    $lineTotal = $this->calculateLineTotal(
+                        quantity: $quantity,
+                        unitCost: (string) $itemData['unit_cost'],
+                    );
+
+                    $item = new RequestItem([
+                        'quantity' => $quantity,
+                        'description' => $itemData['description'],
+                        'unit_cost' => $itemData['unit_cost'],
+                        'remarks' => $itemData['remarks'] ?? null,
+                    ]);
+
+                    /*
+                    * Laravel controls the ordering and calculated amount.
+                    */
+                    $item->line_number = $index + 1;
+                    $item->line_total = $lineTotal;
+
+                    $lockedRequest->items()->save($item);
+
+                    $grandTotal = bcadd(
+                        $grandTotal,
+                        $lineTotal,
+                        2,
+                    );
+                }
+
+                /*
+                * Replace the old approval chain with the newly resolved one.
+                */
+                $lockedRequest->approvalSteps()->delete();
+
+                $this->storeApprovalSteps(
+                    requestForm: $lockedRequest,
+                    approvalPlan: $approvalPlan,
+                );
+
+                /*
+                * Editing a Disapproved request is a resubmission.
+                */
+                $lockedRequest->grand_total = $grandTotal;
+                $lockedRequest->status = RequestStatus::Pending;
+                $lockedRequest->save();
+
+                /*
+                * Existing attachments remain associated with the request.
+                */
+                return $lockedRequest->refresh()->load([
+                    'requester',
+                    'branch',
+                    'items',
+                    'attachments',
+                    'approvalSteps.approver',
+                ]);
+            },
+        );
     }
 }

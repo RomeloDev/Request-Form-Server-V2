@@ -421,14 +421,12 @@ class StoreStockRequisitionTest extends TestCase
             'items' => [
                 [
                     'quantity' => '2',
-                    'unit' => 'ream',
                     'description' => 'A4 bond paper',
                     'unit_cost' => '100.20',
                     'remarks' => 'For Accounting',
                 ],
                 [
                     'quantity' => '3',
-                    'unit' => 'box',
                     'description' => 'Black ballpens',
                     'unit_cost' => '20.15',
                     'remarks' => null,
