@@ -101,7 +101,7 @@ class StockRequisitionService
 
                     $item = new RequestItem([
                         'quantity' => $quantity,
-                        'unit' => $itemData['unit'] ?? null,
+                        // 'unit' => $itemData['unit'] ?? null,
                         'description' => $itemData['description'],
                         'unit_cost' => $itemData['unit_cost'],
                         'remarks' => $itemData['remarks'] ?? null,

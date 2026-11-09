@@ -168,5 +168,21 @@ Route::prefix('v1')->middleware('throttle:60,1')->group(function () {
                 ], 404),
             )
             ->name('request-forms.cancel');
+        Route::get(
+            '/request-forms/{requestForm}/print',
+            [RequestFormController::class, 'showPrintable'],
+        )->missing(
+            fn () => response()->json([
+                'message' => 'Request not found.',
+            ], 404),
+        )->name('request-forms.print.show');
+        Route::get(
+            '/request-forms/{requestForm}/print/signatures/{signatureOwner}',
+            [RequestFormController::class, 'viewPrintableSignature'],
+        )->missing(
+            fn () => response()->json([
+                'message' => 'Request or signature not found.',
+            ], 404),
+        )->name('request-forms.print.signatures.show');
     });
 });

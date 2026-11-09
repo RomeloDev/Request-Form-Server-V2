@@ -50,6 +50,27 @@ class RequestFormPolicy
             ->exists();
     }
 
+    public function viewPrintable(
+        User $user,
+        RequestForm $requestForm
+    ): bool {
+        if (! $user->hasAnyRole([
+            'Admin',
+            'User',
+            'approver',
+        ])) {
+            return false;
+        }
+
+        if ((int) $requestForm->requester_id === (int) $user->getKey()) {
+            return true;
+        }
+
+        return $requestForm->approvalSteps()
+            ->where('approver_id', $user->getKey())
+            ->exists();
+    }
+
     /**
      * Determine whether the user can create models.
      */

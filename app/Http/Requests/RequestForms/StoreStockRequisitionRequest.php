@@ -92,11 +92,11 @@ class StoreStockRequisitionRequest extends FormRequest
                 'min:1',
                 'max:100000',
             ],
-            'items.*.unit' => [
-                'nullable',
-                'string',
-                'max:50',
-            ],
+            // 'items.*.unit' => [
+            //     'nullable',
+            //     'string',
+            //     'max:50',
+            // ],
             'items.*.description' => [
                 'required',
                 'string',

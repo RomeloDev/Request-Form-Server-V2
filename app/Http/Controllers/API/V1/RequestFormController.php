@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\API\V1;
 
+use App\Enums\ApprovalStepStatus;
 use App\Enums\RequestStatus;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\RequestForms\AccessRequestAttachmentRequest;
@@ -9,11 +10,15 @@ use App\Http\Requests\RequestForms\CancelMyRequestRequest;
 use App\Http\Requests\RequestForms\ListMyRequestsRequest;
 use App\Http\Requests\RequestForms\ListRequestApproverCandidatesRequest;
 use App\Http\Requests\RequestForms\ShowMyRequestRequest;
+use App\Http\Requests\RequestForms\ShowPrintableRequestRequest;
 use App\Http\Requests\RequestForms\StoreStockRequisitionRequest;
+use App\Http\Requests\RequestForms\ViewPrintableRequestSignatureRequest;
+use App\Http\Resources\PrintableRequestResource;
 use App\Http\Resources\RequestApproverCandidateResource;
 use App\Http\Resources\RequestFormResource;
 use App\Models\RequestAttachment;
 use App\Models\RequestForm;
+use App\Models\User;
 use App\Services\RequestApproverCandidateService;
 use App\Services\RequestCancellationService;
 use App\Services\StockRequisitionService;
@@ -170,6 +175,84 @@ class RequestFormController extends Controller
                 'message' => 'Request retrieved successfully.',
             ])
             ->response();
+    }
+
+    public function showPrintable(
+        ShowPrintableRequestRequest $request,
+        RequestForm $requestForm,
+    ): JsonResponse {
+        if ($requestForm->status === RequestStatus::Canceled) {
+            return response()->json([
+                'message' => 'Canceled requests cannot be printed.',
+            ], Response::HTTP_CONFLICT);
+        }
+
+        $requestForm->load([
+            'requester',
+            'branch',
+            'items',
+            'approvalSteps.approver',
+        ]);
+
+        return (new PrintableRequestResource($requestForm))
+            ->additional([
+                'message' => 'Printable request retrieved successfully.',
+            ])
+            ->response();
+    }
+
+    public function viewPrintableSignature(
+        ViewPrintableRequestSignatureRequest $request,
+        RequestForm $requestForm,
+        User $signatureOwner,
+    ): StreamedResponse|JsonResponse {
+        if ($requestForm->status === RequestStatus::Canceled) {
+            return response()->json([
+                'message' => 'Canceled requests cannot be printed.',
+            ], Response::HTTP_CONFLICT);
+        }
+
+        $isRequester = (int) $requestForm->requester_id === (int) $signatureOwner->getKey();
+
+        $isApprovedApprover = $requestForm->approvalSteps()
+            ->where('approver_id', $signatureOwner->getKey())
+            ->where(
+                'status',
+                ApprovalStepStatus::Approved->value,
+            )
+            ->exists();
+
+        if (! $isRequester && ! $isApprovedApprover) {
+            abort(
+                Response::HTTP_NOT_FOUND,
+                'Signature not available.',
+            );
+        }
+
+        $signaturePath = $signatureOwner->signature;
+        $disk = Storage::disk('public');
+
+        if (
+            ! is_string($signaturePath)
+            || $signaturePath === ''
+            || ! $disk->exists($signaturePath)
+        ) {
+            abort(
+                Response::HTTP_NOT_FOUND,
+                'Signature not available.',
+            );
+        }
+
+        return $disk->response(
+            $signaturePath,
+            "signature-{$signatureOwner->id}.png",
+            [
+                'Content-Type' => 'image/png',
+                'Cache-Control' => 'private, no-store',
+                'X-Content-Type-Options' => 'nosniff',
+            ],
+            'inline',
+        );
     }
 
     public function previewAttachment(AccessRequestAttachmentRequest $request, RequestForm $requestForm, RequestAttachment $attachment): StreamedResponse
