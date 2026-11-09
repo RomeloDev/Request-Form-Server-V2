@@ -203,5 +203,29 @@ Route::prefix('v1')->middleware('throttle:60,1')->group(function () {
                     'message' => 'Request not found.',
                 ], 404),
             )->name('request-forms.destroy');
+
+        Route::get(
+            '/approver/request-forms',
+            [RequestFormController::class, 'assignedRequests'],
+        )->name('approver.request-forms.index');
+        Route::get(
+            '/approver/request-forms/{requestForm}',
+            [RequestFormController::class, 'showAssignedRequest'],
+        )->missing(
+            fn () => response()->json([
+                'message' => 'Assigned request not found.',
+            ], 404),
+        )->name('approver.request-forms.show');
+        Route::patch(
+            '/approver/request-forms/{requestForm}/decision',
+            [RequestFormController::class, 'decideAssignedRequest'],
+        )
+            ->middleware('throttle:10,1')
+            ->missing(
+                fn () => response()->json([
+                    'message' => 'Assigned request not found.',
+                ], 404),
+            )
+            ->name('approver.request-forms.decision');
     });
 });

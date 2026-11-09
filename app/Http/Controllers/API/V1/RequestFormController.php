@@ -7,22 +7,28 @@ use App\Enums\RequestStatus;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\RequestForms\AccessRequestAttachmentRequest;
 use App\Http\Requests\RequestForms\CancelMyRequestRequest;
+use App\Http\Requests\RequestForms\DecideAssignedRequestRequest;
 use App\Http\Requests\RequestForms\DeleteMyRequestRequest;
+use App\Http\Requests\RequestForms\ListAssignedRequestsRequest;
 use App\Http\Requests\RequestForms\ListMyRequestsRequest;
 use App\Http\Requests\RequestForms\ListRequestApproverCandidatesRequest;
+use App\Http\Requests\RequestForms\ShowAssignedRequestRequest;
 use App\Http\Requests\RequestForms\ShowMyRequestRequest;
 use App\Http\Requests\RequestForms\ShowPrintableRequestRequest;
 use App\Http\Requests\RequestForms\StoreStockRequisitionRequest;
 use App\Http\Requests\RequestForms\UpdateStockRequisitionRequest;
 use App\Http\Requests\RequestForms\ViewPrintableRequestSignatureRequest;
+use App\Http\Resources\AssignedRequestResource;
 use App\Http\Resources\PrintableRequestResource;
 use App\Http\Resources\RequestApproverCandidateResource;
 use App\Http\Resources\RequestFormResource;
+use App\Models\RequestApprovalStep;
 use App\Models\RequestAttachment;
 use App\Models\RequestForm;
 use App\Models\User;
 use App\Services\RequestApproverCandidateService;
 use App\Services\RequestCancellationService;
+use App\Services\RequestDecisionService;
 use App\Services\RequestDeletionService;
 use App\Services\StockRequisitionService;
 use Illuminate\Http\JsonResponse;
@@ -44,6 +50,207 @@ class RequestFormController extends Controller
         'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
         'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     ];
+
+    public function assignedRequests(
+        ListAssignedRequestsRequest $request
+    ): JsonResponse {
+        $filters = $request->validated();
+
+        $approverId = $request->user()->getKey();
+        $search = trim((string) ($filters['search'] ?? ''));
+        $status = $filters['status'] ?? 'ALL';
+
+        $assignments = RequestApprovalStep::query()
+            /*
+            * Never accept the approver identity from the browser.
+            */
+            ->where('approver_id', $approverId)
+
+            /*
+            * Canceled requests do not appear in Process Requests.
+            */
+            ->whereHas(
+                'requestForm',
+                fn ($query) => $query
+                    ->where('status', '!=', RequestStatus::Canceled->value)
+                    ->when(
+                        $status !== 'ALL',
+                        fn ($statusQuery) => $statusQuery->where(
+                            'status',
+                            $status,
+                        ),
+                    ),
+            )
+
+            /*
+            * Include:
+            * 1. This approver's completed/disapproved history.
+            * 2. A Pending step only when every earlier level is Approved.
+            */
+            ->where(function ($query): void {
+                $query
+                    ->where(
+                        'status',
+                        '!=',
+                        ApprovalStepStatus::Pending->value,
+                    )
+                    ->orWhere(function ($pendingQuery): void {
+                        $pendingQuery
+                            ->where(
+                                'status',
+                                ApprovalStepStatus::Pending->value,
+                            )
+                            ->whereHas(
+                                'requestForm',
+                                fn ($requestQuery) => $requestQuery->whereIn(
+                                    'status',
+                                    [
+                                        RequestStatus::Pending->value,
+                                        RequestStatus::Ongoing->value,
+                                    ],
+                                ),
+                            )
+                            ->whereNotExists(function ($earlierSteps): void {
+                                $earlierSteps
+                                    ->selectRaw('1')
+                                    ->from(
+                                        'request_approval_steps as earlier_steps'
+                                    )
+                                    ->whereColumn(
+                                        'earlier_steps.request_form_id',
+                                        'request_approval_steps.request_form_id',
+                                    )
+                                    ->whereColumn(
+                                        'earlier_steps.level',
+                                        '<',
+                                        'request_approval_steps.level',
+                                    )
+                                    ->where(
+                                        'earlier_steps.status',
+                                        '!=',
+                                        ApprovalStepStatus::Approved->value,
+                                    );
+                            });
+                    });
+            })
+
+            ->when(
+                $search !== '',
+                fn ($query) => $query->whereHas(
+                    'requestForm',
+                    fn ($requestQuery) => $requestQuery->where(
+                        function ($searchQuery) use ($search): void {
+                            $searchQuery
+                                ->where(
+                                    'request_code',
+                                    'like',
+                                    "%{$search}%",
+                                )
+                                ->orWhere(
+                                    'form_type',
+                                    'like',
+                                    "%{$search}%",
+                                )
+                                ->orWhere(
+                                    'kind_of_request',
+                                    'like',
+                                    "%{$search}%",
+                                )
+                                ->orWhereHas(
+                                    'requester',
+                                    fn ($requesterQuery) => $requesterQuery
+                                        ->where(
+                                            'firstName',
+                                            'like',
+                                            "%{$search}%",
+                                        )
+                                        ->orWhere(
+                                            'lastName',
+                                            'like',
+                                            "%{$search}%",
+                                        ),
+                                )
+                                ->orWhereHas(
+                                    'branch',
+                                    fn ($branchQuery) => $branchQuery
+                                        ->where(
+                                            'branch_code',
+                                            'like',
+                                            "%{$search}%",
+                                        )
+                                        ->orWhere(
+                                            'branch_name',
+                                            'like',
+                                            "%{$search}%",
+                                        ),
+                                );
+                        },
+                    ),
+                ),
+            )
+
+            /*
+            * Prevent an N+1 query for each table row.
+            */
+            ->with([
+                'requestForm.requester',
+                'requestForm.branch',
+            ])
+            ->latest('request_approval_steps.created_at')
+            ->latest('request_approval_steps.id')
+            ->paginate($filters['per_page'] ?? 10)
+            ->withQueryString();
+
+        return AssignedRequestResource::collection($assignments)
+            ->additional([
+                'message' => 'Assigned requests retrieved successfully.',
+            ])
+            ->response();
+    }
+
+    public function showAssignedRequest(
+        ShowAssignedRequestRequest $request,
+        RequestForm $requestForm,
+    ): JsonResponse {
+        $requestForm->load([
+            'requester',
+            'branch',
+            'items',
+            'attachments',
+            'approvalSteps.approver',
+        ]);
+
+        return (new RequestFormResource($requestForm))
+            ->additional([
+                'message' => 'Assigned request retrieved successfully.',
+            ])
+            ->response();
+    }
+
+    public function decideAssignedRequest(
+        DecideAssignedRequestRequest $request,
+        RequestForm $requestForm,
+        RequestDecisionService $service,
+    ): JsonResponse {
+        $data = $request->validated();
+
+        $updatedRequest = $service->decide(
+            requestForm: $requestForm,
+            approver: $request->user(),
+            action: $data['action'],
+            comment: $data['comment'] ?? null,
+        );
+
+        $message = $data['action'] === 'approve'
+            ? 'Request approved successfully.'
+            : 'Request disapproved successfully.';
+
+        return (new RequestFormResource($updatedRequest))
+            ->additional([
+                'message' => $message,
+            ])
+            ->response();
+    }
 
     public function index(ListMyRequestsRequest $request): JsonResponse
     {

@@ -72,6 +72,36 @@ class RequestFormPolicy
     }
 
     /**
+     * Determine whether the user may access their assigned approval requests.
+     */
+    public function viewAssigned(User $user): bool
+    {
+        return $user->hasRole('approver');
+    }
+
+    public function viewAssignedRequest(User $user, RequestForm $requestForm): bool
+    {
+        if (! $user->hasRole('approver')) {
+            return false;
+        }
+
+        return $requestForm->approvalSteps()
+            ->where('approver_id', $user->getKey())
+            ->exists();
+    }
+
+    public function decideAssignedRequest(User $user, RequestForm $requestForm): bool
+    {
+        if (! $user->hasRole('approver')) {
+            return false;
+        }
+
+        return $requestForm->approvalSteps()
+            ->where('approver_id', $user->getKey())
+            ->exists();
+    }
+
+    /**
      * Determine whether the user can create models.
      */
     public function create(User $user): bool
