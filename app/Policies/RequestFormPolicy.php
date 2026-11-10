@@ -47,6 +47,21 @@ class RequestFormPolicy
     }
 
     /**
+     * Determine whether the user may list the recipients a request has
+     * been shared with. Only the requester who owns the request may do so.
+     */
+    public function listShares(
+        User $user,
+        RequestForm $requestForm
+    ): bool {
+        return $user->hasAnyRole([
+            'Admin',
+            'User',
+            'approver',
+        ]) && (int) $requestForm->requester_id === (int) $user->getKey();
+    }
+
+    /**
      * Determine whether the user may share the request with other users.
      * Only the requester who owns the request may do so.
      */

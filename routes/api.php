@@ -146,6 +146,14 @@ Route::prefix('v1')->middleware('throttle:60,1')->group(function () {
                 'message' => 'Request not found.',
             ], 404),
         )->name('request-forms.share-candidates.index');
+        Route::get(
+            '/request-forms/{requestForm}/shares',
+            [RequestFormController::class, 'indexShares']
+        )->missing(
+            fn () => response()->json([
+                'message' => 'Request not found.',
+            ], 404),
+        )->name('request-forms.shares.index');
         Route::post(
             '/request-forms/{requestForm}/shares',
             [RequestFormController::class, 'storeShare']

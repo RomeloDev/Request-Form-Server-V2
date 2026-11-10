@@ -14,6 +14,7 @@ use App\Http\Requests\RequestForms\ListAssignedRequestsRequest;
 use App\Http\Requests\RequestForms\ListMyRequestsRequest;
 use App\Http\Requests\RequestForms\ListRequestApproverCandidatesRequest;
 use App\Http\Requests\RequestForms\ListRequestShareCandidatesRequest;
+use App\Http\Requests\RequestForms\ListRequestSharesRequest;
 use App\Http\Requests\RequestForms\ShowAssignedRequestRequest;
 use App\Http\Requests\RequestForms\ShowMyRequestRequest;
 use App\Http\Requests\RequestForms\ShowPrintableRequestRequest;
@@ -26,6 +27,7 @@ use App\Http\Resources\PrintableRequestResource;
 use App\Http\Resources\RequestApproverCandidateResource;
 use App\Http\Resources\RequestFormResource;
 use App\Http\Resources\RequestShareCandidateResource;
+use App\Http\Resources\RequestShareRecipientResource;
 use App\Models\RequestApprovalAttachment;
 use App\Models\RequestApprovalStep;
 use App\Models\RequestAttachment;
@@ -406,6 +408,34 @@ class RequestFormController extends Controller
         )
             ->additional([
                 'message' => 'Share candidates retrieved successfully.',
+            ])
+            ->response();
+    }
+
+    /**
+     * List the users this completed request has been shared with.
+     */
+    public function indexShares(
+        ListRequestSharesRequest $request,
+        RequestForm $requestForm,
+        RequestSharingService $service,
+    ): JsonResponse {
+        if ($requestForm->status !== RequestStatus::Completed) {
+            return response()->json([
+                'message' => 'Only completed requests can be shared.',
+            ], Response::HTTP_CONFLICT);
+        }
+
+        $recipients = $service->paginateRecipientsFor(
+            requestForm: $requestForm,
+            filters: $request->validated(),
+        );
+
+        return RequestShareRecipientResource::collection(
+            $recipients
+        )
+            ->additional([
+                'message' => 'Shared recipients retrieved successfully.',
             ])
             ->response();
     }
