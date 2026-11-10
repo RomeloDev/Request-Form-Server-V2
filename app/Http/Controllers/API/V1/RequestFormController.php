@@ -17,6 +17,7 @@ use App\Http\Requests\RequestForms\ListRequestShareCandidatesRequest;
 use App\Http\Requests\RequestForms\ShowAssignedRequestRequest;
 use App\Http\Requests\RequestForms\ShowMyRequestRequest;
 use App\Http\Requests\RequestForms\ShowPrintableRequestRequest;
+use App\Http\Requests\RequestForms\StoreRequestShareRequest;
 use App\Http\Requests\RequestForms\StoreStockRequisitionRequest;
 use App\Http\Requests\RequestForms\UpdateStockRequisitionRequest;
 use App\Http\Requests\RequestForms\ViewPrintableRequestSignatureRequest;
@@ -35,6 +36,7 @@ use App\Services\RequestCancellationService;
 use App\Services\RequestDecisionService;
 use App\Services\RequestDeletionService;
 use App\Services\RequestShareCandidateService;
+use App\Services\RequestSharingService;
 use App\Services\StockRequisitionService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Storage;
@@ -406,6 +408,34 @@ class RequestFormController extends Controller
                 'message' => 'Share candidates retrieved successfully.',
             ])
             ->response();
+    }
+
+    /**
+     * Share a completed request with the selected eligible recipients.
+     */
+    public function storeShare(
+        StoreRequestShareRequest $request,
+        RequestForm $requestForm,
+        RequestSharingService $service,
+    ): JsonResponse {
+        if ($requestForm->status !== RequestStatus::Completed) {
+            return response()->json([
+                'message' => 'Only completed requests can be shared.',
+            ], Response::HTTP_CONFLICT);
+        }
+
+        $sharedCount = $service->share(
+            requestForm: $requestForm,
+            userIds: $request->validated()['user_ids'],
+        );
+
+        return response()->json([
+            'message' => 'Request shared successfully.',
+            'data' => [
+                'request_id' => $requestForm->id,
+                'shared_count' => $sharedCount,
+            ],
+        ], Response::HTTP_CREATED);
     }
 
     public function storeStockRequisition(

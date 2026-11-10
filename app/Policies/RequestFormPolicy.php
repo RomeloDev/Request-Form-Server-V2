@@ -46,6 +46,19 @@ class RequestFormPolicy
         ]) && (int) $requestForm->requester_id === (int) $user->getKey();
     }
 
+    /**
+     * Determine whether the user may share the request with other users.
+     * Only the requester who owns the request may do so.
+     */
+    public function share(User $user, RequestForm $requestForm): bool
+    {
+        return $user->hasAnyRole([
+            'Admin',
+            'User',
+            'approver',
+        ]) && (int) $requestForm->requester_id === (int) $user->getKey();
+    }
+
     public function viewAttachment(User $user, RequestForm $requestForm): bool
     {
         if (! $user->hasAnyRole([

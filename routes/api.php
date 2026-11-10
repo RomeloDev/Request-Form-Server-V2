@@ -147,6 +147,14 @@ Route::prefix('v1')->middleware('throttle:60,1')->group(function () {
             ], 404),
         )->name('request-forms.share-candidates.index');
         Route::post(
+            '/request-forms/{requestForm}/shares',
+            [RequestFormController::class, 'storeShare']
+        )->missing(
+            fn () => response()->json([
+                'message' => 'Request not found.',
+            ], 404),
+        )->name('request-forms.shares.store');
+        Route::post(
             '/request-forms/stock-requisitions',
             [RequestFormController::class, 'storeStockRequisition']
         )->middleware('throttle:10,1')->name('request-forms.stock-requisitions.store');
