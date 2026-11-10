@@ -158,6 +158,16 @@ Route::prefix('v1')->middleware('throttle:60,1')->group(function () {
             [RequestFormController::class, 'downloadAttachment']
         )->scopeBindings()
             ->name('request-forms.attachments.download');
+        Route::get(
+            '/request-forms/{requestForm}/approval-steps/{approvalStep}/attachments/{approvalAttachment}/preview',
+            [RequestFormController::class, 'previewApprovalAttachment']
+        )->scopeBindings()
+            ->name('request-forms.approval-attachments.preview');
+        Route::get(
+            '/request-forms/{requestForm}/approval-steps/{approvalStep}/attachments/{approvalAttachment}/download',
+            [RequestFormController::class, 'downloadApprovalAttachment']
+        )->scopeBindings()
+            ->name('request-forms.approval-attachments.download');
         Route::patch(
             '/request-forms/{requestForm}/cancel',
             [RequestFormController::class, 'cancel'],
@@ -219,13 +229,11 @@ Route::prefix('v1')->middleware('throttle:60,1')->group(function () {
         Route::patch(
             '/approver/request-forms/{requestForm}/decision',
             [RequestFormController::class, 'decideAssignedRequest'],
+        )->missing(
+            fn () => response()->json([
+                'message' => 'Assigned request not found.',
+            ], 404),
         )
-            ->middleware('throttle:10,1')
-            ->missing(
-                fn () => response()->json([
-                    'message' => 'Assigned request not found.',
-                ], 404),
-            )
             ->name('approver.request-forms.decision');
     });
 });

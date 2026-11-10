@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources;
 
+use App\Models\RequestApprovalAttachment;
 use App\Models\RequestApprovalStep;
 use App\Models\RequestAttachment;
 use App\Models\RequestItem;
@@ -97,6 +98,18 @@ class RequestFormResource extends JsonResource
                             'status' => $step->status->value,
                             'comment' => $step->comment,
                             'acted_at' => $step->acted_at?->toISOString(),
+                            'attachments' => $step->relationLoaded('attachments')
+                                ? $step->attachments
+                                    ->map(
+                                        fn (RequestApprovalAttachment $attachment): array => [
+                                            'id' => $attachment->id,
+                                            'original_name' => $attachment->original_name,
+                                            'mime_type' => $attachment->mime_type,
+                                            'size_bytes' => $attachment->size_bytes,
+                                        ],
+                                    )
+                                    ->values()
+                                : [],
 
                             /*
                             * Return only the approver information needed by the

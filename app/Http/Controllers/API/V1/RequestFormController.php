@@ -5,6 +5,7 @@ namespace App\Http\Controllers\API\V1;
 use App\Enums\ApprovalStepStatus;
 use App\Enums\RequestStatus;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\RequestForms\AccessApprovalAttachmentRequest;
 use App\Http\Requests\RequestForms\AccessRequestAttachmentRequest;
 use App\Http\Requests\RequestForms\CancelMyRequestRequest;
 use App\Http\Requests\RequestForms\DecideAssignedRequestRequest;
@@ -22,6 +23,7 @@ use App\Http\Resources\AssignedRequestResource;
 use App\Http\Resources\PrintableRequestResource;
 use App\Http\Resources\RequestApproverCandidateResource;
 use App\Http\Resources\RequestFormResource;
+use App\Models\RequestApprovalAttachment;
 use App\Models\RequestApprovalStep;
 use App\Models\RequestAttachment;
 use App\Models\RequestForm;
@@ -51,6 +53,15 @@ class RequestFormController extends Controller
         'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     ];
 
+    private const APPROVED_ATTACHMENT_MIME_TYPES = [
+        'image/gif',
+        'image/jpeg',
+        'image/png',
+        'image/vnd.microsoft.icon',
+        'image/webp',
+        'image/x-icon',
+    ];
+
     public function assignedRequests(
         ListAssignedRequestsRequest $request
     ): JsonResponse {
@@ -59,6 +70,7 @@ class RequestFormController extends Controller
         $approverId = $request->user()->getKey();
         $search = trim((string) ($filters['search'] ?? ''));
         $status = $filters['status'] ?? 'ALL';
+        $assignmentStatus = $filters['assignment_status'] ?? 'ALL';
 
         $assignments = RequestApprovalStep::query()
             /*
@@ -133,6 +145,14 @@ class RequestFormController extends Controller
                             });
                     });
             })
+
+            ->when(
+                $assignmentStatus !== 'ALL',
+                fn ($query) => $query->where(
+                    'status',
+                    $assignmentStatus,
+                ),
+            )
 
             ->when(
                 $search !== '',
@@ -218,6 +238,7 @@ class RequestFormController extends Controller
             'items',
             'attachments',
             'approvalSteps.approver',
+            'approvalSteps.attachments',
         ]);
 
         return (new RequestFormResource($requestForm))
@@ -239,6 +260,7 @@ class RequestFormController extends Controller
             approver: $request->user(),
             action: $data['action'],
             comment: $data['comment'] ?? null,
+            attachments: $data['attachments'] ?? [],
         );
 
         $message = $data['action'] === 'approve'
@@ -378,6 +400,7 @@ class RequestFormController extends Controller
             'items',
             'attachments',
             'approvalSteps.approver',
+            'approvalSteps.attachments',
         ]);
 
         return (new RequestFormResource($requestForm))
@@ -528,6 +551,63 @@ class RequestFormController extends Controller
                 'X-Content-Type-Options' => 'nosniff',
             ],
         );
+    }
+
+    public function previewApprovalAttachment(
+        AccessApprovalAttachmentRequest $request,
+        RequestForm $requestForm,
+        RequestApprovalStep $approvalStep,
+        RequestApprovalAttachment $approvalAttachment,
+    ): StreamedResponse {
+        $this->ensureApprovedAttachmentIsAvailable($approvalAttachment);
+
+        return Storage::disk($approvalAttachment->disk)->response(
+            $approvalAttachment->path,
+            $approvalAttachment->original_name,
+            [
+                'Content-Type' => $approvalAttachment->mime_type,
+                'Cache-Control' => 'private, no-store',
+                'X-Content-Type-Options' => 'nosniff',
+            ],
+            'inline',
+        );
+    }
+
+    public function downloadApprovalAttachment(
+        AccessApprovalAttachmentRequest $request,
+        RequestForm $requestForm,
+        RequestApprovalStep $approvalStep,
+        RequestApprovalAttachment $approvalAttachment,
+    ): StreamedResponse {
+        $this->ensureApprovedAttachmentIsAvailable($approvalAttachment);
+
+        return Storage::disk($approvalAttachment->disk)->download(
+            $approvalAttachment->path,
+            $approvalAttachment->original_name,
+            [
+                'Content-Type' => $approvalAttachment->mime_type,
+                'Cache-Control' => 'private, no-store',
+                'X-Content-Type-Options' => 'nosniff',
+            ],
+        );
+    }
+
+    private function ensureApprovedAttachmentIsAvailable(
+        RequestApprovalAttachment $attachment,
+    ): void {
+        if (! in_array($attachment->mime_type, self::APPROVED_ATTACHMENT_MIME_TYPES, true)) {
+            abort(
+                Response::HTTP_UNSUPPORTED_MEDIA_TYPE,
+                'This approved attachment type is unavailable.',
+            );
+        }
+
+        if (! Storage::disk($attachment->disk)->exists($attachment->path)) {
+            abort(
+                Response::HTTP_NOT_FOUND,
+                'Approved attachment file not found.',
+            );
+        }
     }
 
     public function cancel(

@@ -2,9 +2,12 @@
 
 namespace App\Http\Requests\RequestForms;
 
+use App\Enums\ApprovalStepType;
+use App\Models\RequestApprovalStep;
 use App\Models\RequestForm;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\Validator;
 
 class DecideAssignedRequestRequest extends FormRequest
 {
@@ -51,7 +54,17 @@ class DecideAssignedRequestRequest extends FormRequest
             ],
 
             'attachment' => ['prohibited'],
-            'attachments' => ['prohibited'],
+            'attachments' => [
+                'sometimes',
+                'array',
+                'max:10',
+            ],
+            'attachments.*' => [
+                'required',
+                'file',
+                'mimes:png,jpg,jpeg,webp,gif,ico',
+                'max:5120',
+            ],
 
             'user_id' => ['prohibited'],
             'approver_id' => ['prohibited'],
@@ -60,6 +73,55 @@ class DecideAssignedRequestRequest extends FormRequest
             'status' => ['prohibited'],
             'request_status' => ['prohibited'],
             'acted_at' => ['prohibited'],
+        ];
+    }
+
+    /**
+     * Restrict approved attachments to delegated staff approvals.
+     */
+    public function after(): array
+    {
+        return [
+            function (Validator $validator): void {
+                if (
+                    ! $this->hasFile('attachments')
+                    || $validator->errors()->has('attachments')
+                    || $validator->errors()->has('attachments.*')
+                ) {
+                    return;
+                }
+
+                if ($this->input('action') !== 'approve') {
+                    $validator->errors()->add(
+                        'attachments',
+                        'Approved attachments may only be uploaded with an approval.',
+                    );
+
+                    return;
+                }
+
+                $requestForm = $this->route('requestForm');
+                $approverId = $this->user()?->getKey();
+
+                if (! $requestForm instanceof RequestForm || $approverId === null) {
+                    return;
+                }
+
+                $assignedStep = RequestApprovalStep::query()
+                    ->where('request_form_id', $requestForm->getKey())
+                    ->where('approver_id', $approverId)
+                    ->first();
+
+                if (
+                    $assignedStep?->step_type !==
+                    ApprovalStepType::DelegatedApproval
+                ) {
+                    $validator->errors()->add(
+                        'attachments',
+                        'Only delegated approval staff may upload approved attachments.',
+                    );
+                }
+            },
         ];
     }
 }

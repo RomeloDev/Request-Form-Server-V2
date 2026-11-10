@@ -295,6 +295,65 @@ class ListAssignedRequestsTest extends TestCase
             ->assertJsonPath('meta.per_page', 1);
     }
 
+    public function test_pending_assignment_filter_includes_actionable_pending_and_ongoing_requests(): void
+    {
+        $branch = $this->branch('QUEUE');
+        $requester = $this->user($branch);
+        $firstApprover = $this->user($branch, 'approver');
+        $currentApprover = $this->user($branch, 'approver');
+
+        $pendingRequest = $this->requestForm(
+            requester: $requester,
+            branch: $branch,
+            requestCode: 'QUEUE-PENDING',
+            status: RequestStatus::Pending,
+        );
+        $this->approvalStep($pendingRequest, $currentApprover, 1);
+
+        $ongoingRequest = $this->requestForm(
+            requester: $requester,
+            branch: $branch,
+            requestCode: 'QUEUE-ONGOING',
+            status: RequestStatus::Ongoing,
+        );
+        $this->approvalStep(
+            $ongoingRequest,
+            $firstApprover,
+            1,
+            ApprovalStepStatus::Approved,
+        );
+        $this->approvalStep($ongoingRequest, $currentApprover, 2);
+
+        $completedRequest = $this->requestForm(
+            requester: $requester,
+            branch: $branch,
+            requestCode: 'QUEUE-COMPLETED',
+            status: RequestStatus::Completed,
+        );
+        $this->approvalStep(
+            $completedRequest,
+            $currentApprover,
+            1,
+            ApprovalStepStatus::Approved,
+        );
+
+        Sanctum::actingAs($currentApprover);
+
+        $response = $this->getJson(
+            '/api/v1/approver/request-forms?assignment_status=Pending&per_page=50',
+        );
+
+        $response
+            ->assertOk()
+            ->assertJsonPath('meta.total', 2);
+
+        $ids = collect($response->json('data'))->pluck('id')->all();
+
+        $this->assertContains($pendingRequest->id, $ids);
+        $this->assertContains($ongoingRequest->id, $ids);
+        $this->assertNotContains($completedRequest->id, $ids);
+    }
+
     public function test_identity_overrides_and_invalid_filters_are_rejected(): void
     {
         $approver = $this->user(
@@ -305,7 +364,7 @@ class ListAssignedRequestsTest extends TestCase
         Sanctum::actingAs($approver);
 
         $this->getJson(
-            '/api/v1/approver/request-forms?user_id=1&approver_id=1&requester_id=1&branch_id=1&approval_step_id=1&status=all&page=0&per_page=51',
+            '/api/v1/approver/request-forms?user_id=1&approver_id=1&requester_id=1&branch_id=1&approval_step_id=1&status=all&assignment_status=waiting&page=0&per_page=51',
         )
             ->assertUnprocessable()
             ->assertJsonValidationErrors([
@@ -315,6 +374,7 @@ class ListAssignedRequestsTest extends TestCase
                 'branch_id',
                 'approval_step_id',
                 'status',
+                'assignment_status',
                 'page',
                 'per_page',
             ]);

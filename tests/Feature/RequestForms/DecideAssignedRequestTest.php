@@ -7,10 +7,13 @@ use App\Enums\ApprovalStepType;
 use App\Enums\RequestFormType;
 use App\Enums\RequestStatus;
 use App\Models\Branch;
+use App\Models\RequestApprovalAttachment;
 use App\Models\RequestApprovalStep;
 use App\Models\RequestForm;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
 use Laravel\Sanctum\Sanctum;
 use Spatie\Permission\Models\Role;
 use Spatie\Permission\PermissionRegistrar;
@@ -154,6 +157,200 @@ class DecideAssignedRequestTest extends TestCase
             'status' => RequestStatus::Completed->value,
         ]);
         $this->assertNotNull($finalStep->fresh()->acted_at);
+    }
+
+    public function test_delegated_approver_can_upload_optional_approved_images(): void
+    {
+        Storage::fake('local');
+
+        $branch = $this->branch('DELEGATED');
+        $requester = $this->user($branch);
+        $approver = $this->user($branch, 'approver');
+        $requestForm = $this->requestForm($requester, $branch);
+        $step = $this->approvalStep(
+            $requestForm,
+            $approver,
+            1,
+            ApprovalStepStatus::Pending,
+            ApprovalStepType::DelegatedApproval,
+        );
+
+        Sanctum::actingAs($approver);
+
+        $this->post($this->decisionUrl($requestForm), [
+            '_method' => 'PATCH',
+            'action' => 'approve',
+            'attachments' => [
+                UploadedFile::fake()->image('signed-approval.png'),
+            ],
+        ], ['Accept' => 'application/json'])
+            ->assertOk()
+            ->assertJsonCount(1, 'data.approval_steps.0.attachments')
+            ->assertJsonPath(
+                'data.approval_steps.0.attachments.0.original_name',
+                'signed-approval.png',
+            );
+
+        $attachment = RequestApprovalAttachment::query()->firstOrFail();
+
+        $this->assertSame($step->id, $attachment->request_approval_step_id);
+        $this->assertSame('local', $attachment->disk);
+        Storage::disk('local')->assertExists($attachment->path);
+    }
+
+    public function test_non_delegated_and_disapproving_staff_cannot_upload_approved_attachments(): void
+    {
+        Storage::fake('local');
+
+        $branch = $this->branch('UPLOAD-RULES');
+        $requester = $this->user($branch);
+        $ordinaryApprover = $this->user($branch, 'approver');
+        $delegatedApprover = $this->user($branch, 'approver');
+
+        $ordinaryRequest = $this->requestForm($requester, $branch);
+        $this->approvalStep($ordinaryRequest, $ordinaryApprover, 1);
+
+        Sanctum::actingAs($ordinaryApprover);
+
+        $this->post($this->decisionUrl($ordinaryRequest), [
+            '_method' => 'PATCH',
+            'action' => 'approve',
+            'attachments' => [UploadedFile::fake()->image('forged.png')],
+        ], ['Accept' => 'application/json'])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['attachments']);
+
+        $delegatedRequest = $this->requestForm($requester, $branch);
+        $this->approvalStep(
+            $delegatedRequest,
+            $delegatedApprover,
+            1,
+            ApprovalStepStatus::Pending,
+            ApprovalStepType::DelegatedApproval,
+        );
+
+        Sanctum::actingAs($delegatedApprover);
+
+        $this->post($this->decisionUrl($delegatedRequest), [
+            '_method' => 'PATCH',
+            'action' => 'disapprove',
+            'comment' => 'The request needs correction.',
+            'attachments' => [UploadedFile::fake()->image('not-approved.png')],
+        ], ['Accept' => 'application/json'])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['attachments']);
+
+        $this->assertDatabaseCount('request_approval_attachments', 0);
+        $this->assertSame([], Storage::disk('local')->allFiles());
+    }
+
+    public function test_approved_attachment_validates_type_size_and_count(): void
+    {
+        Storage::fake('local');
+
+        $branch = $this->branch('UPLOAD-VALIDATION');
+        $requester = $this->user($branch);
+        $approver = $this->user($branch, 'approver');
+        $requestForm = $this->requestForm($requester, $branch);
+        $this->approvalStep(
+            $requestForm,
+            $approver,
+            1,
+            ApprovalStepStatus::Pending,
+            ApprovalStepType::DelegatedApproval,
+        );
+
+        Sanctum::actingAs($approver);
+
+        $this->post($this->decisionUrl($requestForm), [
+            '_method' => 'PATCH',
+            'action' => 'approve',
+            'attachments' => [
+                UploadedFile::fake()->create('script.php', 10, 'application/x-httpd-php'),
+                UploadedFile::fake()->create('too-large.png', 5121, 'image/png'),
+            ],
+        ], ['Accept' => 'application/json'])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors([
+                'attachments.0',
+                'attachments.1',
+            ]);
+
+        $this->post($this->decisionUrl($requestForm), [
+            '_method' => 'PATCH',
+            'action' => 'approve',
+            'attachments' => collect(range(1, 11))
+                ->map(
+                    fn (int $number): UploadedFile => UploadedFile::fake()
+                        ->image("approved-{$number}.png"),
+                )
+                ->all(),
+        ], ['Accept' => 'application/json'])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['attachments']);
+
+        $this->assertSame(
+            ApprovalStepStatus::Pending,
+            $requestForm->approvalSteps()->firstOrFail()->status,
+        );
+        $this->assertDatabaseCount('request_approval_attachments', 0);
+    }
+
+    public function test_approved_attachment_files_are_private_and_authorized(): void
+    {
+        Storage::fake('local');
+
+        $branch = $this->branch('APPROVED-FILE');
+        $requester = $this->user($branch);
+        $assignedApprover = $this->user($branch, 'approver');
+        $unassignedApprover = $this->user($branch, 'approver');
+        $requestForm = $this->requestForm($requester, $branch);
+        $step = $this->approvalStep(
+            $requestForm,
+            $assignedApprover,
+            1,
+            ApprovalStepStatus::Approved,
+            ApprovalStepType::DelegatedApproval,
+        );
+
+        $path = "request-forms/{$requestForm->id}/approval-steps/{$step->id}/approved.png";
+        Storage::disk('local')->put($path, 'approved-image');
+
+        $attachment = $step->attachments()->create([
+            'disk' => 'local',
+            'path' => $path,
+            'original_name' => 'approved.png',
+            'mime_type' => 'image/png',
+            'size_bytes' => 14,
+        ]);
+
+        $previewUrl = $this->approvalAttachmentUrl(
+            $requestForm,
+            $step,
+            $attachment,
+            'preview',
+        );
+        $downloadUrl = $this->approvalAttachmentUrl(
+            $requestForm,
+            $step,
+            $attachment,
+            'download',
+        );
+
+        $this->getJson($previewUrl)->assertUnauthorized();
+
+        Sanctum::actingAs($unassignedApprover);
+        $this->getJson($previewUrl)->assertForbidden();
+
+        Sanctum::actingAs($requester);
+        $this->get($previewUrl)->assertOk()->assertHeader('Content-Type', 'image/png');
+        $this->get($downloadUrl)->assertOk()->assertDownload('approved.png');
+        $this->getJson("{$previewUrl}?path=forged.png")
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['path']);
+
+        Sanctum::actingAs($assignedApprover);
+        $this->get($previewUrl)->assertOk();
     }
 
     public function test_disapproval_requires_comment_and_skips_later_steps(): void
@@ -371,7 +568,7 @@ class DecideAssignedRequestTest extends TestCase
                 'action',
                 'comment',
                 'attachment',
-                'attachments',
+                'attachments.0',
                 'user_id',
                 'approver_id',
                 'approval_step_id',
@@ -416,6 +613,15 @@ class DecideAssignedRequestTest extends TestCase
     private function decisionUrl(RequestForm $requestForm): string
     {
         return "/api/v1/approver/request-forms/{$requestForm->id}/decision";
+    }
+
+    private function approvalAttachmentUrl(
+        RequestForm $requestForm,
+        RequestApprovalStep $step,
+        RequestApprovalAttachment $attachment,
+        string $action,
+    ): string {
+        return "/api/v1/request-forms/{$requestForm->id}/approval-steps/{$step->id}/attachments/{$attachment->id}/{$action}";
     }
 
     private function branch(string $code): Branch
@@ -481,11 +687,12 @@ class DecideAssignedRequestTest extends TestCase
         User $approver,
         int $level,
         ApprovalStepStatus $status = ApprovalStepStatus::Pending,
+        ApprovalStepType $stepType = ApprovalStepType::ApprovedBy,
     ): RequestApprovalStep {
         $step = new RequestApprovalStep;
         $step->level = $level;
         $step->approver_id = $approver->id;
-        $step->step_type = ApprovalStepType::ApprovedBy;
+        $step->step_type = $stepType;
         $step->status = $status;
         $step->acted_at = $status === ApprovalStepStatus::Approved
             ? now()

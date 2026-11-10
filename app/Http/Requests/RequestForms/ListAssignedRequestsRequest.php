@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\RequestForms;
 
+use App\Enums\ApprovalStepStatus;
 use App\Enums\RequestStatus;
 use App\Models\RequestForm;
 use Illuminate\Foundation\Http\FormRequest;
@@ -26,6 +27,10 @@ class ListAssignedRequestsRequest extends FormRequest
             fn (RequestStatus $status): string => $status->value,
             RequestStatus::cases(),
         );
+        $assignmentStatuses = array_map(
+            fn (ApprovalStepStatus $status): string => $status->value,
+            ApprovalStepStatus::cases(),
+        );
 
         return [
             'search' => [
@@ -38,6 +43,12 @@ class ListAssignedRequestsRequest extends FormRequest
                 'nullable',
                 'string',
                 Rule::in(['ALL', ...$statuses]),
+            ],
+
+            'assignment_status' => [
+                'nullable',
+                'string',
+                Rule::in(['ALL', ...$assignmentStatuses]),
             ],
 
             'page' => [
