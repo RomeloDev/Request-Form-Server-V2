@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
@@ -59,5 +60,18 @@ class RequestForm extends Model
     {
         return $this->hasMany(RequestApprovalStep::class)
             ->orderBy('level');
+    }
+
+    /**
+     * Users this request has been explicitly shared with.
+     */
+    public function sharedRecipients(): BelongsToMany
+    {
+        return $this->belongsToMany(
+            User::class,
+            'request_shares',
+            'request_form_id',
+            'recipient_id',
+        )->withTimestamps();
     }
 }
