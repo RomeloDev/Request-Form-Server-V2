@@ -10,6 +10,7 @@ use App\Http\Requests\RequestForms\AccessRequestAttachmentRequest;
 use App\Http\Requests\RequestForms\CancelMyRequestRequest;
 use App\Http\Requests\RequestForms\DecideAssignedRequestRequest;
 use App\Http\Requests\RequestForms\DeleteMyRequestRequest;
+use App\Http\Requests\RequestForms\DestroyRequestShareRequest;
 use App\Http\Requests\RequestForms\ListAssignedRequestsRequest;
 use App\Http\Requests\RequestForms\ListMyRequestsRequest;
 use App\Http\Requests\RequestForms\ListRequestApproverCandidatesRequest;
@@ -466,6 +467,37 @@ class RequestFormController extends Controller
                 'shared_count' => $sharedCount,
             ],
         ], Response::HTTP_CREATED);
+    }
+
+    /**
+     * Revoke one recipient from a completed request's share list.
+     */
+    public function destroyShare(
+        DestroyRequestShareRequest $request,
+        RequestForm $requestForm,
+        string $recipient,
+        RequestSharingService $service,
+    ): JsonResponse {
+        if ($requestForm->status !== RequestStatus::Completed) {
+            return response()->json([
+                'message' => 'Only completed requests can be shared.',
+            ], Response::HTTP_CONFLICT);
+        }
+
+        $recipientId = (int) $recipient;
+
+        $service->revoke(
+            requestForm: $requestForm,
+            recipientId: $recipientId,
+        );
+
+        return response()->json([
+            'message' => 'Shared recipient removed successfully.',
+            'data' => [
+                'request_id' => $requestForm->id,
+                'recipient_id' => $recipientId,
+            ],
+        ]);
     }
 
     public function storeStockRequisition(

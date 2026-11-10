@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
+use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 class RequestSharingService
 {
@@ -124,6 +125,50 @@ class RequestSharingService
                 page: $page,
             )
             ->withQueryString();
+    }
+
+    /**
+     * Revoke one recipient's share from a completed request.
+     *
+     * The recipient is treated as a nested share identifier: a missing or
+     * unrelated share produces the same 404 instead of revealing whether an
+     * arbitrary user account exists.
+     */
+    public function revoke(
+        RequestForm $requestForm,
+        int $recipientId,
+    ): void {
+        DB::transaction(
+            function () use ($requestForm, $recipientId): void {
+                /*
+                 * Keep the same parent-row lock order as share creation 
+                 * so status and shares cannot change underneath us.
+                 */
+                $lockedRequest = RequestForm::query()
+                    ->lockForUpdate()
+                    ->findOrFail($requestForm->getKey());
+
+                if ($lockedRequest->status !== RequestStatus::Completed) {
+                    throw new ConflictHttpException(
+                        'Only completed requests can be shared.',
+                    );
+                }
+
+                /*
+                 * detach() is scoped to this request's relation, deletes
+                 * only the request_shares pivot row, and never touches the
+                 * recipient's users row.
+                 */
+                $deleted = $lockedRequest->sharedRecipients()
+                    ->detach($recipientId);
+
+                if ($deleted === 0) {
+                    throw new NotFoundHttpException(
+                        'Shared recipient not found.',
+                    );
+                }
+            },
+        );
     }
 
     /**

@@ -62,6 +62,21 @@ class RequestFormPolicy
     }
 
     /**
+     * Determine whether the user may revoke a shared recipient from the
+     * request. Only the requester who owns the request may do so.
+     */
+    public function revokeShare(
+        User $user,
+        RequestForm $requestForm
+    ): bool {
+        return $user->hasAnyRole([
+            'Admin',
+            'User',
+            'approver',
+        ]) && (int) $requestForm->requester_id === (int) $user->getKey();
+    }
+
+    /**
      * Determine whether the user may share the request with other users.
      * Only the requester who owns the request may do so.
      */

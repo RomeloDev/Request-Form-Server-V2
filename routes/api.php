@@ -162,6 +162,15 @@ Route::prefix('v1')->middleware('throttle:60,1')->group(function () {
                 'message' => 'Request not found.',
             ], 404),
         )->name('request-forms.shares.store');
+        Route::delete(
+            '/request-forms/{requestForm}/shares/{recipient}',
+            [RequestFormController::class, 'destroyShare']
+        )->whereNumber('recipient')
+            ->missing(
+                fn () => response()->json([
+                    'message' => 'Request not found.',
+                ], 404),
+            )->name('request-forms.shares.destroy');
         Route::post(
             '/request-forms/stock-requisitions',
             [RequestFormController::class, 'storeStockRequisition']
