@@ -7,6 +7,7 @@ use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
@@ -65,6 +66,21 @@ class User extends Authenticatable
     {
         return $this->hasOne(
             BranchHeadAssignment::class, 'user_id'
+        );
+    }
+
+    /**
+     * The branch record matching this user's branch_code.
+     *
+     * Users store the branch code rather than a branch_id, so candidate
+     * queries read the branch name through this relation.
+     */
+    public function assignedBranch(): BelongsTo
+    {
+        return $this->belongsTo(
+            Branch::class,
+            'branch_code',
+            'branch_code',
         );
     }
 

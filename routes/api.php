@@ -138,6 +138,14 @@ Route::prefix('v1')->middleware('throttle:60,1')->group(function () {
             '/request-forms/approver-candidates',
             [RequestFormController::class, 'approverCandidates']
         )->name('request-forms.approver-candidates.index');
+        Route::get(
+            '/request-forms/{requestForm}/share-candidates',
+            [RequestFormController::class, 'shareCandidates']
+        )->missing(
+            fn () => response()->json([
+                'message' => 'Request not found.',
+            ], 404),
+        )->name('request-forms.share-candidates.index');
         Route::post(
             '/request-forms/stock-requisitions',
             [RequestFormController::class, 'storeStockRequisition']

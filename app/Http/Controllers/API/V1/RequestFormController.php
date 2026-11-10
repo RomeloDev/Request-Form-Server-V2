@@ -13,6 +13,7 @@ use App\Http\Requests\RequestForms\DeleteMyRequestRequest;
 use App\Http\Requests\RequestForms\ListAssignedRequestsRequest;
 use App\Http\Requests\RequestForms\ListMyRequestsRequest;
 use App\Http\Requests\RequestForms\ListRequestApproverCandidatesRequest;
+use App\Http\Requests\RequestForms\ListRequestShareCandidatesRequest;
 use App\Http\Requests\RequestForms\ShowAssignedRequestRequest;
 use App\Http\Requests\RequestForms\ShowMyRequestRequest;
 use App\Http\Requests\RequestForms\ShowPrintableRequestRequest;
@@ -23,6 +24,7 @@ use App\Http\Resources\AssignedRequestResource;
 use App\Http\Resources\PrintableRequestResource;
 use App\Http\Resources\RequestApproverCandidateResource;
 use App\Http\Resources\RequestFormResource;
+use App\Http\Resources\RequestShareCandidateResource;
 use App\Models\RequestApprovalAttachment;
 use App\Models\RequestApprovalStep;
 use App\Models\RequestAttachment;
@@ -32,6 +34,7 @@ use App\Services\RequestApproverCandidateService;
 use App\Services\RequestCancellationService;
 use App\Services\RequestDecisionService;
 use App\Services\RequestDeletionService;
+use App\Services\RequestShareCandidateService;
 use App\Services\StockRequisitionService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Storage;
@@ -368,6 +371,39 @@ class RequestFormController extends Controller
         )
             ->additional([
                 'message' => 'Eligible request approvers retrieved successfully.',
+            ])
+            ->response();
+    }
+
+    /**
+     * List verified, non-admin users this completed request can be
+     * shared with.
+     */
+    public function shareCandidates(
+        ListRequestShareCandidatesRequest $request,
+        RequestForm $requestForm,
+        RequestShareCandidateService $service,
+    ): JsonResponse {
+        /*
+         * Sharing is only meaningful after the request is fully completed.
+         * This is a business-state conflict, not an authorization failure.
+         */
+        if ($requestForm->status !== RequestStatus::Completed) {
+            return response()->json([
+                'message' => 'Only completed requests can be shared.',
+            ], Response::HTTP_CONFLICT);
+        }
+
+        $candidates = $service->paginateFor(
+            requestForm: $requestForm,
+            filters: $request->validated(),
+        );
+
+        return RequestShareCandidateResource::collection(
+            $candidates
+        )
+            ->additional([
+                'message' => 'Share candidates retrieved successfully.',
             ])
             ->response();
     }
