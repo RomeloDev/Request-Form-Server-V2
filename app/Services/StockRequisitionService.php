@@ -3,21 +3,16 @@
 namespace App\Services;
 
 use App\Enums\ApprovalStepStatus;
-use App\Enums\ApprovalStepType;
 use App\Enums\RequestFormType;
 use App\Enums\RequestStatus;
-use App\Models\Branch;
 use App\Models\RequestApprovalStep;
 use App\Models\RequestForm;
-use App\Models\RequestItem;
 use App\Models\User;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
-use RuntimeException;
 use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
 use Throwable;
 
@@ -25,6 +20,7 @@ class StockRequisitionService
 {
     public function __construct(
         private readonly RequestApprovalChainResolver $approvalChainResolver,
+        private readonly RequestSubmissionWriter $writer,
     ) {}
 
     /**
@@ -47,7 +43,7 @@ class StockRequisitionService
      */
     public function create(User $requester, array $data): RequestForm
     {
-        $branch = $this->findRequesterBranch($requester);
+        $branch = $this->writer->findRequesterBranch($requester);
 
         /** @var list<UploadedFile> $attachments */
         $attachments = $data['attachments'] ?? [];
@@ -80,60 +76,32 @@ class StockRequisitionService
                     approvedByIds: $data['approved_by_ids'],
                 );
 
-                $requestForm = $this->createRequestForm(
+                $requestForm = $this->writer->createRequestForm(
                     requester: $requester,
                     branch: $branch,
-                    data: $data,
+                    formType: RequestFormType::StockRequisition,
+                    codePrefix: 'SRL',
+                    kindOfRequest: $data['kind_of_request'] ?? null,
+                    formData: [
+                        'purpose' => $data['form_data']['purpose'],
+                    ],
                 );
 
-                $this->storeApprovalSteps(
+                $this->writer->storeApprovalSteps(
                     requestForm: $requestForm,
                     approvalPlan: $approvalPlan,
                 );
 
-                $grandTotal = '0.00';
-
-                foreach ($data['items'] as $index => $itemData) {
-                    $quantity = (int) $itemData['quantity'];
-
-                    $lineTotal = $this->calculateLineTotal(
-                        quantity: $quantity,
-                        unitCost: (string) $itemData['unit_cost'],
-                    );
-
-                    $item = new RequestItem([
-                        'quantity' => $quantity,
-                        // 'unit' => $itemData['unit'] ?? null,
-                        'description' => $itemData['description'],
-                        'unit_cost' => $itemData['unit_cost'],
-                        'remarks' => $itemData['remarks'] ?? null,
-                    ]);
-
-                    /*
-                     * These values are not fillable because the server,
-                     * rather than the browser, controls them.
-                     */
-                    $item->line_number = $index + 1;
-                    $item->line_total = $lineTotal;
-
-                    /*
-                     * Saving through the relationship automatically sets
-                     * request_form_id.
-                     */
-                    $requestForm->items()->save($item);
-
-                    $grandTotal = bcadd(
-                        $grandTotal,
-                        $lineTotal,
-                        2,
-                    );
-                }
+                $grandTotal = $this->writer->storeItems(
+                    requestForm: $requestForm,
+                    items: $data['items'],
+                );
 
                 $requestForm->grand_total = $grandTotal;
                 $requestForm->save();
 
                 foreach ($attachments as $file) {
-                    $this->storeAttachment(
+                    $this->writer->storeAttachment(
                         requestForm: $requestForm,
                         file: $file,
                         storedPaths: $storedPaths,
@@ -159,180 +127,6 @@ class StockRequisitionService
 
             throw $exception;
         }
-    }
-
-    /**
-     * Locate the authenticated user's branch.
-     */
-    private function findRequesterBranch(User $requester): Branch
-    {
-        if (blank($requester->branch_code)) {
-            throw ValidationException::withMessages([
-                'branch' => 'Your account does not have an assigned branch.',
-            ]);
-        }
-
-        $branch = Branch::query()
-            ->where('branch_code', $requester->branch_code)
-            ->first();
-
-        if (! $branch) {
-            throw ValidationException::withMessages([
-                'branch' => 'Your assigned branch could not be found.',
-            ]);
-        }
-
-        return $branch;
-    }
-
-    /**
-     * Create the parent request record.
-     *
-     * A temporary UUID allows the record to be inserted before it has
-     * a numeric database ID. We then use that ID in the final code.
-     */
-    private function createRequestForm(
-        User $requester,
-        Branch $branch,
-        array $data,
-    ): RequestForm {
-        $requestForm = new RequestForm([
-            'kind_of_request' => $data['kind_of_request'] ?? null,
-            'form_data' => $data['form_data'],
-            'currency' => 'PHP',
-        ]);
-
-        /*
-         * These properties are server-controlled and intentionally absent
-         * from the model's Fillable list.
-         */
-        $requestForm->request_code = 'TEMP-'.Str::uuid();
-        $requestForm->form_type = RequestFormType::StockRequisition;
-        $requestForm->status = RequestStatus::Pending;
-        $requestForm->grand_total = '0.00';
-
-        $requestForm->requester()->associate($requester);
-        $requestForm->branch()->associate($branch);
-
-        $requestForm->save();
-
-        /*
-         * The request ID is globally unique, so the final code is safe
-         * even when two users submit requests simultaneously.
-         *
-         * Example: CALI-SRL-0000123
-         */
-        $branchCode = Str::upper(
-            Str::slug($branch->branch_code, '-')
-        );
-
-        $requestForm->request_code = sprintf(
-            '%s-SRL-%07d',
-            $branchCode,
-            $requestForm->id,
-        );
-
-        $requestForm->save();
-
-        return $requestForm;
-    }
-
-    /**
-     * Save the resolved approvers in their required processing order.
-     *
-     * @param  list<array{
-     *     approver_id: int,
-     *     step_type: ApprovalStepType
-     * }>  $approvalPlan
-     */
-    private function storeApprovalSteps(
-        RequestForm $requestForm,
-        array $approvalPlan,
-    ): void {
-        foreach ($approvalPlan as $index => $resolvedStep) {
-            $approvalStep = new RequestApprovalStep;
-
-            /*
-            * Array indexes begin at zero, but approval levels begin at one.
-            */
-            $approvalStep->level = $index + 1;
-            $approvalStep->approver_id =
-                $resolvedStep['approver_id'];
-            $approvalStep->step_type =
-                $resolvedStep['step_type'];
-            $approvalStep->status =
-                ApprovalStepStatus::Pending;
-
-            /*
-            * Saving through the relationship automatically supplies the
-            * request_form_id foreign key.
-            */
-            $requestForm
-                ->approvalSteps()
-                ->save($approvalStep);
-        }
-    }
-
-    /**
-     * Calculate one item's money value using decimal arithmetic.
-     *
-     * All values are non-negative because the Form Request validates them.
-     */
-    private function calculateLineTotal(
-        int $quantity,
-        string $unitCost,
-    ): string {
-        return bcmul(
-            (string) $quantity,
-            $unitCost,
-            2,
-        );
-    }
-
-    /**
-     * Store one file privately and create its metadata record.
-     */
-    private function storeAttachment(
-        RequestForm $requestForm,
-        UploadedFile $file,
-        array &$storedPaths,
-    ): void {
-        /*
-         * UploadedFile::store() generates a safe hashed filename.
-         * The "local" disk points to storage/app/private.
-         */
-        $path = $file->store(
-            "request-forms/{$requestForm->id}",
-            'local',
-        );
-
-        if (! is_string($path)) {
-            throw new RuntimeException(
-                'The attachment could not be stored.'
-            );
-        }
-
-        $storedPaths[] = $path;
-
-        $requestForm->attachments()->create([
-            'disk' => 'local',
-            'path' => $path,
-
-            /*
-             * Original names are display metadata only.
-             * Limit the stored length to match the database column.
-             */
-            'original_name' => Str::limit(
-                $file->getClientOriginalName(),
-                255,
-                ''
-            ),
-
-            'mime_type' => $file->getMimeType()
-                ?? 'application/octet-stream',
-
-            'size_bytes' => (int) $file->getSize(),
-        ]);
     }
 
     /**
@@ -535,44 +329,17 @@ class StockRequisitionService
                     */
                     $lockedRequest->items()->delete();
 
-                    $grandTotal = '0.00';
-
-                    foreach ($data['items'] as $index => $itemData) {
-                        $quantity = (int) $itemData['quantity'];
-
-                        $lineTotal = $this->calculateLineTotal(
-                            quantity: $quantity,
-                            unitCost: (string) $itemData['unit_cost'],
-                        );
-
-                        $item = new RequestItem([
-                            'quantity' => $quantity,
-                            'description' => $itemData['description'],
-                            'unit_cost' => $itemData['unit_cost'],
-                            'remarks' => $itemData['remarks'] ?? null,
-                        ]);
-
-                        /*
-                        * Laravel controls the ordering and calculated amount.
-                        */
-                        $item->line_number = $index + 1;
-                        $item->line_total = $lineTotal;
-
-                        $lockedRequest->items()->save($item);
-
-                        $grandTotal = bcadd(
-                            $grandTotal,
-                            $lineTotal,
-                            2,
-                        );
-                    }
+                    $grandTotal = $this->writer->storeItems(
+                        requestForm: $lockedRequest,
+                        items: $data['items'],
+                    );
 
                     /*
                     * Replace the old approval chain with the newly resolved one.
                     */
                     $lockedRequest->approvalSteps()->delete();
 
-                    $this->storeApprovalSteps(
+                    $this->writer->storeApprovalSteps(
                         requestForm: $lockedRequest,
                         approvalPlan: $approvalPlan,
                     );
@@ -585,7 +352,7 @@ class StockRequisitionService
                     $lockedRequest->save();
 
                     foreach ($newAttachments as $file) {
-                        $this->storeAttachment(
+                        $this->writer->storeAttachment(
                             requestForm: $lockedRequest,
                             file: $file,
                             storedPaths: $storedPaths,

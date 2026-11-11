@@ -12,6 +12,7 @@ use App\Http\Controllers\API\V1\Auth\RegisterController;
 use App\Http\Controllers\API\V1\BranchController;
 use App\Http\Controllers\API\V1\PositionController;
 use App\Http\Controllers\API\V1\RequestFormController;
+use App\Http\Controllers\API\V1\SupplierController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -284,5 +285,11 @@ Route::prefix('v1')->middleware('throttle:60,1')->group(function () {
                 'message' => 'Shared request not found.',
             ], 404),
         )->name('shared-requests.show');
+
+        // Supplier List Endpoint
+        Route::get(
+            '/suppliers',
+            [SupplierController::class, 'index'],
+        )->name('suppliers.index');
     });
 });
