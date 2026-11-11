@@ -141,7 +141,7 @@ class RequestSharingService
         DB::transaction(
             function () use ($requestForm, $recipientId): void {
                 /*
-                 * Keep the same parent-row lock order as share creation 
+                 * Keep the same parent-row lock order as share creation
                  * so status and shares cannot change underneath us.
                  */
                 $lockedRequest = RequestForm::query()

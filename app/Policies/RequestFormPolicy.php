@@ -20,6 +20,45 @@ class RequestFormPolicy
     }
 
     /**
+     * Determine whether the user may list requests shared with their own
+     * account. Approved application roles may use this endpoint.
+     */
+    public function viewSharedRequests(User $user): bool
+    {
+        return $user->hasAnyRole([
+            'Admin',
+            'User',
+            'approver',
+        ]);
+    }
+
+    /**
+     * Determine whether the user may view a request that was explicitly
+     * shared with their account.
+     *
+     * This is deliberately relationship-based only. Request ownership does
+     * not satisfy this ability; owners use the My Requests endpoint. The
+     * recipient identity always comes from the authenticated user, never
+     * from a client-supplied parameter.
+     */
+    public function viewSharedRequest(
+        User $user,
+        RequestForm $requestForm
+    ): bool {
+        if (! $user->hasAnyRole([
+            'Admin',
+            'User',
+            'approver',
+        ])) {
+            return false;
+        }
+
+        return $requestForm->sharedRecipients()
+            ->where('users.id', $user->getKey())
+            ->exists();
+    }
+
+    /**
      * Determine whether the user can view the model.
      */
     public function view(User $user, RequestForm $requestForm): bool

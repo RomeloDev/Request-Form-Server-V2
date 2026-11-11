@@ -268,5 +268,21 @@ Route::prefix('v1')->middleware('throttle:60,1')->group(function () {
             ], 404),
         )
             ->name('approver.request-forms.decision');
+
+        /*
+        * Recipient-side shared request endpoints.
+        */
+        Route::get(
+            '/shared-requests',
+            [RequestFormController::class, 'sharedRequests'],
+        )->name('shared-requests.index');
+        Route::get(
+            '/shared-requests/{requestForm}',
+            [RequestFormController::class, 'showSharedRequest'],
+        )->missing(
+            fn () => response()->json([
+                'message' => 'Shared request not found.',
+            ], 404),
+        )->name('shared-requests.show');
     });
 });

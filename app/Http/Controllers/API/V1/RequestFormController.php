@@ -16,9 +16,11 @@ use App\Http\Requests\RequestForms\ListMyRequestsRequest;
 use App\Http\Requests\RequestForms\ListRequestApproverCandidatesRequest;
 use App\Http\Requests\RequestForms\ListRequestShareCandidatesRequest;
 use App\Http\Requests\RequestForms\ListRequestSharesRequest;
+use App\Http\Requests\RequestForms\ListSharedRequestsRequest;
 use App\Http\Requests\RequestForms\ShowAssignedRequestRequest;
 use App\Http\Requests\RequestForms\ShowMyRequestRequest;
 use App\Http\Requests\RequestForms\ShowPrintableRequestRequest;
+use App\Http\Requests\RequestForms\ShowSharedRequestRequest;
 use App\Http\Requests\RequestForms\StoreRequestShareRequest;
 use App\Http\Requests\RequestForms\StoreStockRequisitionRequest;
 use App\Http\Requests\RequestForms\UpdateStockRequisitionRequest;
@@ -29,6 +31,7 @@ use App\Http\Resources\RequestApproverCandidateResource;
 use App\Http\Resources\RequestFormResource;
 use App\Http\Resources\RequestShareCandidateResource;
 use App\Http\Resources\RequestShareRecipientResource;
+use App\Http\Resources\SharedRequestResource;
 use App\Models\RequestApprovalAttachment;
 use App\Models\RequestApprovalStep;
 use App\Models\RequestAttachment;
@@ -344,6 +347,116 @@ class RequestFormController extends Controller
                 'message' => 'Your requests retrieved successfully.',
                 'summary' => $summary,
             ])->response();
+    }
+
+    /**
+     * List the requests shared with the authenticated recipient.
+     *
+     * The query is scoped exclusively through the authenticated user's
+     * sharedRequests() relation; no recipient ID is accepted from the client.
+     */
+    public function sharedRequests(
+        ListSharedRequestsRequest $request
+    ): JsonResponse {
+        $filters = $request->validated();
+        $search = trim((string) ($filters['search'] ?? ''));
+
+        $sharedRequests = $request->user()
+            ->sharedRequests()
+            ->with([
+                'requester',
+                'branch',
+            ])
+            ->when(
+                $search !== '',
+                fn ($query) => $query->where(
+                    function ($searchQuery) use ($search): void {
+                        $searchQuery
+                            ->where(
+                                'request_code',
+                                'like',
+                                "%{$search}%",
+                            )
+                            ->orWhere(
+                                'form_type',
+                                'like',
+                                "%{$search}%",
+                            )
+                            ->orWhere(
+                                'kind_of_request',
+                                'like',
+                                "%{$search}%",
+                            )
+                            ->orWhereHas(
+                                'requester',
+                                fn ($requesterQuery) => $requesterQuery
+                                    ->where(
+                                        'firstName',
+                                        'like',
+                                        "%{$search}%",
+                                    )
+                                    ->orWhere(
+                                        'lastName',
+                                        'like',
+                                        "%{$search}%",
+                                    ),
+                            )
+                            ->orWhereHas(
+                                'branch',
+                                fn ($branchQuery) => $branchQuery
+                                    ->where(
+                                        'branch_code',
+                                        'like',
+                                        "%{$search}%",
+                                    )
+                                    ->orWhere(
+                                        'branch_name',
+                                        'like',
+                                        "%{$search}%",
+                                    ),
+                            );
+                    },
+                ),
+            )
+            ->orderBy('request_shares.created_at', 'desc')
+            ->orderBy('request_forms.id', 'desc')
+            ->paginate($filters['per_page'] ?? 10)
+            ->withQueryString();
+
+        return SharedRequestResource::collection(
+            $sharedRequests
+        )
+            ->additional([
+                'message' => 'Shared requests retrieved successfully.',
+            ])
+            ->response();
+    }
+
+    /**
+     * Show one request shared with the authenticated recipient.
+     *
+     * Authorization is relationship-based only. Loading and returning the
+     * details performs no writes, so request, share, and approval data stay
+     * untouched.
+     */
+    public function showSharedRequest(
+        ShowSharedRequestRequest $request,
+        RequestForm $requestForm,
+    ): JsonResponse {
+        $requestForm->load([
+            'requester',
+            'branch',
+            'items',
+            'attachments',
+            'approvalSteps.approver',
+            'approvalSteps.attachments',
+        ]);
+
+        return (new RequestFormResource($requestForm))
+            ->additional([
+                'message' => 'Shared request retrieved successfully.',
+            ])
+            ->response();
     }
 
     /**
