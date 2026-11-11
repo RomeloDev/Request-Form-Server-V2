@@ -25,6 +25,7 @@ class ShowPrintableRequestRequest extends FormRequest
     {
         return [
             'user_id' => ['prohibited'],
+            'recipient_id' => ['prohibited'],
             'requester_id' => ['prohibited'],
             'branch_id' => ['prohibited'],
         ];

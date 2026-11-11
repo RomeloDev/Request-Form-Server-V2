@@ -128,6 +128,14 @@ class RequestFormPolicy
         ]) && (int) $requestForm->requester_id === (int) $user->getKey();
     }
 
+    /**
+     * Determine whether the user may access this request's attachments.
+     *
+     * Requesters and assigned approvers keep their existing access. An
+     * approved user who is a current shared recipient may also access the
+     * same attachments. The recipient is always the authenticated user, so a
+     * revoked share removes access on the very next request.
+     */
     public function viewAttachment(User $user, RequestForm $requestForm): bool
     {
         if (! $user->hasAnyRole([
@@ -142,8 +150,21 @@ class RequestFormPolicy
             return true;
         }
 
-        return $requestForm->approvalSteps()
-            ->where('approver_id', $user->getKey())
+        if (
+            $requestForm->approvalSteps()
+                ->where('approver_id', $user->getKey())
+                ->exists()
+        ) {
+            return true;
+        }
+
+        /*
+         * Scope the check to the exact request resolved by route binding and
+         * to the authenticated user's own key. Never accept a recipient ID
+         * from the browser.
+         */
+        return $requestForm->sharedRecipients()
+            ->whereKey($user->getKey())
             ->exists();
     }
 
@@ -160,6 +181,19 @@ class RequestFormPolicy
         }
 
         if ((int) $requestForm->requester_id === (int) $user->getKey()) {
+            return true;
+        }
+
+        /*
+         * A share is looked up from the database on every request. Revoking
+         * the share therefore removes printable access immediately.
+         *
+         * The recipient identity always comes from the authenticated user,
+         * never from a query parameter or request payload.
+         */
+        if ($requestForm->sharedRecipients()
+            ->where('users.id', $user->getKey())
+            ->exists()) {
             return true;
         }
 
