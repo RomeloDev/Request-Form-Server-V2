@@ -327,7 +327,7 @@ class ListMyRequestsTest extends TestCase
             requestCode: 'UNSHARED-SRL-1',
         );
 
-        Sanctum::actingAs($requester);  
+        Sanctum::actingAs($requester);
 
         $this->getJson('/api/v1/request-forms')
             ->assertOk()
