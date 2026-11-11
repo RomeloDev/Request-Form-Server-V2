@@ -74,6 +74,9 @@ class ListMyRequestsTest extends TestCase
             createdAt: now()->addMinute(),
         );
 
+        // The other user's share must not influence the owner's table.
+        $otherRequest->sharedRecipients()->attach($otherUser->id);
+
         Sanctum::actingAs($requester);
 
         $response = $this->getJson('/api/v1/request-forms?per_page=1');
@@ -87,6 +90,7 @@ class ListMyRequestsTest extends TestCase
             ->assertJsonCount(1, 'data')
             ->assertJsonPath('data.0.id', $newer->id)
             ->assertJsonPath('data.0.request_code', $newer->request_code)
+            ->assertJsonPath('data.0.shared_count', 0)
             ->assertJsonPath('meta.total', 2)
             ->assertJsonPath('meta.per_page', 1)
             ->assertJsonStructure([
@@ -202,6 +206,24 @@ class ListMyRequestsTest extends TestCase
         return $user;
     }
 
+    /**
+     * Create a share recipient. Shares are counted only, so recipients do
+     * not need a branch relationship for these listings.
+     */
+    private function recipient(): User
+    {
+        $number = ++$this->sequence;
+
+        return User::factory()->create([
+            'firstName' => "List{$number}",
+            'lastName' => 'Recipient',
+            'contact' => "0918000{$number}",
+            'position' => 'Employee',
+            'userName' => "list-recipient-{$number}",
+            'employee_id' => "LIST-EMP-{$number}",
+        ]);
+    }
+
     private function requestForm(
         User $requester,
         Branch $branch,
@@ -292,5 +314,117 @@ class ListMyRequestsTest extends TestCase
             ->assertJsonPath('summary.completed', 1)
             ->assertJsonPath('summary.disapproved', 1)
             ->assertJsonPath('summary.canceled', 1);
+    }
+
+    public function test_owned_request_without_recipients_reports_zero_shared_count(): void
+    {
+        $branch = $this->branch('UNSHARED');
+        $requester = $this->user($branch);
+
+        $this->requestForm(
+            requester: $requester,
+            branch: $branch,
+            requestCode: 'UNSHARED-SRL-1',
+        );
+
+        Sanctum::actingAs($requester);  
+
+        $this->getJson('/api/v1/request-forms')
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.shared_count', 0);
+    }
+
+    public function test_owned_request_shared_with_multiple_recipients_reports_the_count(): void
+    {
+        $branch = $this->branch('SHARED');
+        $requester = $this->user($branch);
+
+        $recipients = collect([$this->recipient(), $this->recipient(), $this->recipient()]);
+
+        $this->requestForm(
+            requester: $requester,
+            branch: $branch,
+            requestCode: 'SHARED-SRL-1',
+            status: RequestStatus::Completed,
+        )->sharedRecipients()->attach($recipients->pluck('id'));
+
+        Sanctum::actingAs($requester);
+
+        $response = $this->getJson('/api/v1/request-forms');
+
+        $response
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.shared_count', 3);
+
+        /*
+         * Only the count is exposed; no recipient identities or pivot data.
+         */
+        $this->assertNotContains(
+            'shared_recipients',
+            array_keys($response->json('data.0')),
+        );
+    }
+
+    public function test_another_requesters_shares_are_never_counted(): void
+    {
+        $branch = $this->branch('ISOLATION');
+        $requester = $this->user($branch);
+        $otherUser = $this->user($branch);
+
+        $mine = $this->requestForm(
+            requester: $requester,
+            branch: $branch,
+            requestCode: 'MINE-SRL-1',
+        );
+
+        $theirs = $this->requestForm(
+            requester: $otherUser,
+            branch: $branch,
+            requestCode: 'THEIRS-SRL-2',
+            status: RequestStatus::Completed,
+        );
+
+        $theirs->sharedRecipients()->attach([
+            $this->recipient()->id,
+            $this->recipient()->id,
+        ]);
+
+        Sanctum::actingAs($requester);
+
+        $this->getJson('/api/v1/request-forms')
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.id', $mine->id)
+            ->assertJsonPath('data.0.shared_count', 0);
+    }
+
+    public function test_revoked_shares_are_not_counted(): void
+    {
+        $branch = $this->branch('REVOKE');
+        $requester = $this->user($branch);
+
+        $kept = $this->recipient();
+        $revoked = $this->recipient();
+
+        $requestForm = $this->requestForm(
+            requester: $requester,
+            branch: $branch,
+            requestCode: 'REVOKE-SRL-1',
+            status: RequestStatus::Completed,
+        );
+
+        $requestForm->sharedRecipients()->attach([$kept->id, $revoked->id]);
+
+        $requestForm->sharedRecipients()->detach($revoked->id);
+
+        Sanctum::actingAs($requester);
+
+        $this->getJson('/api/v1/request-forms')
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.id', $requestForm->id)
+            ->assertJsonPath('data.0.shared_count', 1);
     }
 }

@@ -323,8 +323,13 @@ class RequestFormController extends Controller
             'canceled' => (int) ($summaryResult?->canceled ?? 0),
         ];
 
+        /*
+         * withCount() aggregates every page row's share count in the same
+         * SQL as the list query itself, instead of counting per row later.
+         */
         $requests = (clone $ownedRequests)
             ->with('branch')
+            ->withCount('sharedRecipients')
             ->when(
                 $search !== '',
                 fn ($query) => $query->where(

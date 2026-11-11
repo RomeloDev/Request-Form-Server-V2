@@ -126,6 +126,16 @@ class RequestFormResource extends JsonResource
                     ->values(),
             ),
 
+            /*
+             * Only present when the listing explicitly loaded the share
+             * count via withCount(). Exposes the number of recipients
+             * only; never who they are.
+             */
+            'shared_count' => $this->whenCounted(
+                'sharedRecipients',
+                fn (): int => (int) $this->shared_recipients_count,
+            ),
+
             'created_at' => $this->created_at?->toISOString(),
             'updated_at' => $this->updated_at?->toISOString(),
         ];
