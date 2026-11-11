@@ -176,6 +176,10 @@ Route::prefix('v1')->middleware('throttle:60,1')->group(function () {
             '/request-forms/stock-requisitions',
             [RequestFormController::class, 'storeStockRequisition']
         )->middleware('throttle:10,1')->name('request-forms.stock-requisitions.store');
+        Route::post(
+            '/request-forms/purchase-orders',
+            [RequestFormController::class, 'storePurchaseOrder']
+        )->middleware('throttle:10,1')->name('request-forms.purchase-orders.store');
         Route::get('/request-forms', [RequestFormController::class, 'index'])->name('request-forms.index');
         Route::get('/request-forms/{requestForm}', [RequestFormController::class, 'show'])->missing(
             fn () => response()->json([

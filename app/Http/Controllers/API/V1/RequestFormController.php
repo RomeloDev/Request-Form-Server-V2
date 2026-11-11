@@ -21,6 +21,7 @@ use App\Http\Requests\RequestForms\ShowAssignedRequestRequest;
 use App\Http\Requests\RequestForms\ShowMyRequestRequest;
 use App\Http\Requests\RequestForms\ShowPrintableRequestRequest;
 use App\Http\Requests\RequestForms\ShowSharedRequestRequest;
+use App\Http\Requests\RequestForms\StorePurchaseOrderRequest;
 use App\Http\Requests\RequestForms\StoreRequestShareRequest;
 use App\Http\Requests\RequestForms\StoreStockRequisitionRequest;
 use App\Http\Requests\RequestForms\UpdateStockRequisitionRequest;
@@ -37,6 +38,7 @@ use App\Models\RequestApprovalStep;
 use App\Models\RequestAttachment;
 use App\Models\RequestForm;
 use App\Models\User;
+use App\Services\PurchaseOrderService;
 use App\Services\RequestApproverCandidateService;
 use App\Services\RequestCancellationService;
 use App\Services\RequestDecisionService;
@@ -631,6 +633,26 @@ class RequestFormController extends Controller
 
         $response = (new RequestFormResource($requestForm))->additional([
             'message' => 'Stock Requisition created successfully.',
+        ])->response();
+
+        $response->setStatusCode(Response::HTTP_CREATED);
+
+        return $response;
+    }
+
+    public function storePurchaseOrder(
+        StorePurchaseOrderRequest $request,
+        PurchaseOrderService $service
+    ): JsonResponse {
+        $requester = $request->user();
+
+        $requestForm = $service->create(
+            requester: $requester,
+            data: $request->validated(),
+        );
+
+        $response = (new RequestFormResource($requestForm))->additional([
+            'message' => 'Purchase Order created successfully.',
         ])->response();
 
         $response->setStatusCode(Response::HTTP_CREATED);
