@@ -193,6 +193,40 @@ class ShowPrintableRequestTest extends TestCase
             ->assertJsonMissingPath('data.approval_steps.0.approver.signature');
     }
 
+    public function test_purchase_order_print_contract_includes_only_supplier_fields(): void
+    {
+        $branch = $this->branch('PURCHASE');
+        $owner = $this->user($branch);
+        $requestForm = $this->requestForm(
+            requester: $owner,
+            branch: $branch,
+            formType: RequestFormType::PurchaseOrder,
+            formData: [
+                'supplier' => '  Metro Office Supplies  ',
+                'address' => '  123 Rizal Avenue, Davao City  ',
+                'internal_note' => 'Must not be exposed.',
+            ],
+        );
+
+        Sanctum::actingAs($owner);
+
+        $this->getJson($this->printUrl($requestForm))
+            ->assertOk()
+            ->assertJsonPath(
+                'data.form_type',
+                RequestFormType::PurchaseOrder->value,
+            )
+            ->assertJsonPath(
+                'data.form_data.supplier',
+                'Metro Office Supplies',
+            )
+            ->assertJsonPath(
+                'data.form_data.address',
+                '123 Rizal Avenue, Davao City',
+            )
+            ->assertJsonMissingPath('data.form_data.internal_note');
+    }
+
     #[DataProvider('printableStatusProvider')]
     public function test_every_non_canceled_status_is_printable(
         RequestStatus $status,
@@ -337,21 +371,24 @@ class ShowPrintableRequestTest extends TestCase
         User $requester,
         Branch $branch,
         RequestStatus $status = RequestStatus::Pending,
+        RequestFormType $formType = RequestFormType::StockRequisition,
+        ?array $formData = null,
     ): RequestForm {
         $requestForm = new RequestForm([
             'kind_of_request' => 'For Stock',
             'currency' => 'PHP',
-            'form_data' => [
+            'form_data' => $formData ?? [
                 'purpose' => 'Office use',
             ],
         ]);
 
         $requestForm->request_code = sprintf(
-            '%s-SRL-%07d',
+            '%s-%s-%07d',
             $branch->branch_code,
+            $formType === RequestFormType::PurchaseOrder ? 'PO' : 'SRL',
             ++$this->sequence,
         );
-        $requestForm->form_type = RequestFormType::StockRequisition;
+        $requestForm->form_type = $formType;
         $requestForm->status = $status;
         $requestForm->grand_total = '250.00';
         $requestForm->requester()->associate($requester);

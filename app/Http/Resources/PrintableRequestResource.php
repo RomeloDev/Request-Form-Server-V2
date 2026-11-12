@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources;
 
+use App\Enums\RequestFormType;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -21,6 +22,10 @@ class PrintableRequestResource extends JsonResource
             'currency' => $this->currency,
             'status' => $this->status->value,
             'purpose' => data_get($this->form_data, 'purpose', ''),
+            'form_data' => $this->when(
+                $this->form_type === RequestFormType::PurchaseOrder,
+                fn (): array => $this->purchaseOrderFormData(),
+            ),
             'grand_total' => $this->grand_total,
 
             'branch' => [
@@ -63,6 +68,22 @@ class PrintableRequestResource extends JsonResource
             )->values(),
 
             'created_at' => $this->created_at?->toISOString(),
+        ];
+    }
+
+    /**
+     * Return only the Purchase Order fields required by its print template.
+     *
+     * @return array{supplier: string, address: string}
+     */
+    private function purchaseOrderFormData(): array
+    {
+        $supplier = data_get($this->form_data, 'supplier');
+        $address = data_get($this->form_data, 'address');
+
+        return [
+            'supplier' => is_string($supplier) ? trim($supplier) : '',
+            'address' => is_string($address) ? trim($address) : '',
         ];
     }
 }
