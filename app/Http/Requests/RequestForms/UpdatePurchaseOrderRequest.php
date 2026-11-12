@@ -5,6 +5,7 @@ namespace App\Http\Requests\RequestForms;
 use App\Models\RequestAttachment;
 use App\Models\RequestForm;
 use App\Models\User;
+use App\Support\RequestKindOptions;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -36,7 +37,7 @@ class UpdatePurchaseOrderRequest extends FormRequest
                 'required',
                 'string',
                 'max:100',
-                Rule::in(StorePurchaseOrderRequest::KIND_OPTIONS),
+                Rule::in(RequestKindOptions::VALUES),
             ],
             'form_data' => [
                 'required',

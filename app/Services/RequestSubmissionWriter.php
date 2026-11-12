@@ -10,9 +10,11 @@ use App\Models\RequestApprovalStep;
 use App\Models\RequestForm;
 use App\Models\RequestItem;
 use App\Models\User;
+use App\Support\RequestCurrencies;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
+use InvalidArgumentException;
 use RuntimeException;
 
 class RequestSubmissionWriter
@@ -39,19 +41,37 @@ class RequestSubmissionWriter
         return $branch;
     }
 
-    /** @param array<string, mixed> $formData */
+    /**
+     * Create the parent Request Form record.
+     *
+     * The currency must already be selected and validated by the calling
+     * service. This writer never reads a currency directly from the browser.
+     *
+     * @param  array<string, mixed>|null  $formData
+     */
     public function createRequestForm(
         User $requester,
         Branch $branch,
         RequestFormType $formType,
         string $codePrefix,
         ?string $kindOfRequest,
-        array $formData,
+        ?array $formData,
+        string $currency,
     ): RequestForm {
+        /*
+         * Defense in depth: never persist a currency outside the allowlist,
+         * even if a future caller forgets to validate it.
+         */
+        if (! in_array($currency, RequestCurrencies::VALUES, true)) {
+            throw new InvalidArgumentException(
+                "Unsupported request currency [{$currency}]."
+            );
+        }
+
         $requestForm = new RequestForm([
             'kind_of_request' => $kindOfRequest,
             'form_data' => $formData,
-            'currency' => 'PHP',
+            'currency' => $currency,
         ]);
 
         $requestForm->request_code = 'TEMP-'.Str::uuid();

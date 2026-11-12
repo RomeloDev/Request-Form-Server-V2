@@ -9,6 +9,7 @@ use App\Models\RequestApprovalStep;
 use App\Models\RequestForm;
 use App\Models\Supplier;
 use App\Models\User;
+use App\Support\RequestCurrencies;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
@@ -100,6 +101,7 @@ class PurchaseOrderService
                         'supplier' => $supplierName,
                         'address' => $supplierAddress,
                     ],
+                    currency: RequestCurrencies::PHP,
                 );
 
                 $this->writer->storeApprovalSteps(

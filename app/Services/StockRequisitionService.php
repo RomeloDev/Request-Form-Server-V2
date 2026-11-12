@@ -8,6 +8,7 @@ use App\Enums\RequestStatus;
 use App\Models\RequestApprovalStep;
 use App\Models\RequestForm;
 use App\Models\User;
+use App\Support\RequestCurrencies;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
@@ -85,6 +86,7 @@ class StockRequisitionService
                     formData: [
                         'purpose' => $data['form_data']['purpose'],
                     ],
+                    currency: RequestCurrencies::PHP,
                 );
 
                 $this->writer->storeApprovalSteps(

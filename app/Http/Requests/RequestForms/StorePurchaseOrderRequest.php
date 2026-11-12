@@ -4,6 +4,7 @@ namespace App\Http\Requests\RequestForms;
 
 use App\Models\RequestForm;
 use App\Models\User;
+use App\Support\RequestKindOptions;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -31,7 +32,7 @@ class StorePurchaseOrderRequest extends FormRequest
                 'required',
                 'string',
                 'max:100',
-                Rule::in(self::KIND_OPTIONS),
+                Rule::in(RequestKindOptions::VALUES),
             ],
 
             'form_data' => [
@@ -196,24 +197,4 @@ class StorePurchaseOrderRequest extends FormRequest
             },
         ];
     }
-
-    public const KIND_OPTIONS = [
-        'Office Supplies',
-        'New Registration',
-        'Utility Bills (Water, Electric, Guard Salary)',
-        'Renewal of Unit',
-        'Meal / Diesel / Gasoline Allowance',
-        'Transfer Ownership of Unit',
-        'Shipment Fee',
-        'FFE (New / Replacement)',
-        'Notarial Fee',
-        'Professional Fee',
-        'Retaineers Fee',
-        'Appliance Repair (e.g. Aircon Cleaning)',
-        'MC Service (Office / Service Used)',
-        'LTO Accreditation',
-        'DTI Accreditation',
-        'Cash Advance - Logistics',
-        'Others',
-    ];
 }
