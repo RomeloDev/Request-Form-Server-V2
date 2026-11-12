@@ -1,0 +1,301 @@
+@host = http://localhost:8000
+@origin = http://localhost:3001
+
+# Replace this with an ID returned by request 5.
+@approvedById = 0
+
+###############################################################################
+# CASH DISBURSEMENT API — MANUAL WORKFLOW
+###############################################################################
+
+# 1. Start Laravel from the backend repository:
+#      php artisan serve --host=127.0.0.1 --port=8000
+# 2. Run request 1 to confirm unauthenticated access is rejected.
+# 3. Run request 2 to create the Sanctum CSRF cookie.
+# 4. Copy the XSRF-TOKEN cookie value, URL-decode it, and paste it when the
+#    xsrfToken prompt appears.
+# 5. Run requests 3 and 4 to sign in and confirm the session.
+# 6. Run request 5 and copy an eligible approver ID into approvedById above.
+# 7. Run request 6. Later requests use its response ID and updated_at value.
+#
+# VS Code REST Client keeps cookies for the same host. If a protected request
+# returns 401, repeat requests 2-4. If a mutation returns 419, repeat request 2
+# and use the newest URL-decoded XSRF-TOKEN value.
+#
+# Never add requester_id, branch_id, form_type, status, request_code,
+# grand_total, line_total, or approval-step records to a valid request.
+# Laravel derives or calculates all of those fields.
+
+
+###############################################################################
+# AUTHENTICATION
+###############################################################################
+
+### 1. Guest creation: expected 401 Unauthorized
+# Origin is intentionally omitted so this behaves as a stateless unauthenticated
+# API request rather than failing CSRF validation first.
+POST {{host}}/api/v1/request-forms/cash-disbursements
+Accept: application/json
+Content-Type: application/json
+
+{
+  "kind_of_request": "Office Supplies",
+  "currency": "PHP",
+  "noted_by_ids": [],
+  "approved_by_ids": [{{approvedById}}],
+  "items": [
+    {
+      "quantity": 1,
+      "description": "Guest request must not be stored",
+      "unit_cost": "100.00",
+      "remarks": null
+    }
+  ]
+}
+
+
+### 2. Start or refresh the Laravel Sanctum CSRF session
+GET {{host}}/sanctum/csrf-cookie
+Accept: application/json
+Origin: {{origin}}
+
+
+### 3. Sign in with a verified User, approver, or Admin account
+# @prompt login Enter your username, email, or employee ID
+# @prompt password Enter your password
+# @prompt xsrfToken Paste the URL-decoded XSRF-TOKEN cookie value
+POST {{host}}/api/v1/login
+Accept: application/json
+Content-Type: application/json
+Origin: {{origin}}
+X-XSRF-TOKEN: {{xsrfToken}}
+
+{
+  "email": "{{login}}",
+  "password": "{{password}}"
+}
+
+
+### 4. Confirm the authenticated session
+GET {{host}}/api/v1/profile
+Accept: application/json
+Origin: {{origin}}
+
+
+###############################################################################
+# APPROVAL CANDIDATES
+###############################################################################
+
+### 5. List approvers eligible for the authenticated requester's branch
+# Expected: 200 OK
+# Copy one data[].id value into approvedById at the top of this file.
+GET {{host}}/api/v1/request-forms/approver-candidates?page=1&per_page=50&sort=firstname&direction=asc
+Accept: application/json
+Origin: {{origin}}
+
+
+###############################################################################
+# CREATE CASH DISBURSEMENT
+###############################################################################
+
+### 6. Create a PHP Cash Disbursement
+# Expected: 201 Created
+#
+# This request is named createCash. Requests 10-13 read its response ID and
+# updated_at value automatically.
+# @name createCash
+# @prompt xsrfToken Paste the URL-decoded XSRF-TOKEN cookie value
+POST {{host}}/api/v1/request-forms/cash-disbursements
+Accept: application/json
+Content-Type: application/json
+Origin: {{origin}}
+X-XSRF-TOKEN: {{xsrfToken}}
+
+{
+  "kind_of_request": "Office Supplies",
+  "currency": "PHP",
+  "noted_by_ids": [],
+  "approved_by_ids": [{{approvedById}}],
+  "items": [
+    {
+      "quantity": 2,
+      "description": "A4 bond paper",
+      "unit_cost": "100.20",
+      "remarks": "For Accounting"
+    },
+    {
+      "quantity": 3,
+      "description": "Black ballpens",
+      "unit_cost": "20.15",
+      "remarks": null
+    }
+  ]
+}
+
+
+### 7. Create a USD Cash Disbursement
+# Expected: 201 Created and data.currency = USD
+# @prompt xsrfToken Paste the URL-decoded XSRF-TOKEN cookie value
+POST {{host}}/api/v1/request-forms/cash-disbursements
+Accept: application/json
+Content-Type: application/json
+Origin: {{origin}}
+X-XSRF-TOKEN: {{xsrfToken}}
+
+{
+  "kind_of_request": "Professional Fee",
+  "currency": "USD",
+  "noted_by_ids": [],
+  "approved_by_ids": [{{approvedById}}],
+  "items": [
+    {
+      "quantity": 1,
+      "description": "Professional service",
+      "unit_cost": "250.00",
+      "remarks": "USD-denominated request; no currency conversion is performed"
+    }
+  ]
+}
+
+
+###############################################################################
+# VALIDATION FAILURES
+###############################################################################
+
+### 8. Unsupported currency: expected 422 with errors.currency
+# @prompt xsrfToken Paste the URL-decoded XSRF-TOKEN cookie value
+POST {{host}}/api/v1/request-forms/cash-disbursements
+Accept: application/json
+Content-Type: application/json
+Origin: {{origin}}
+X-XSRF-TOKEN: {{xsrfToken}}
+
+{
+  "kind_of_request": "Office Supplies",
+  "currency": "GBP",
+  "noted_by_ids": [],
+  "approved_by_ids": [{{approvedById}}],
+  "items": [
+    {
+      "quantity": 1,
+      "description": "Invalid currency example",
+      "unit_cost": "100.00",
+      "remarks": null
+    }
+  ]
+}
+
+
+### 9. Server-owned fields: expected 422 validation errors
+# @prompt xsrfToken Paste the URL-decoded XSRF-TOKEN cookie value
+POST {{host}}/api/v1/request-forms/cash-disbursements
+Accept: application/json
+Content-Type: application/json
+Origin: {{origin}}
+X-XSRF-TOKEN: {{xsrfToken}}
+
+{
+  "kind_of_request": "Office Supplies",
+  "currency": "PHP",
+  "requester_id": 999999,
+  "branch_id": 999999,
+  "form_type": "Stock Requisition Slip",
+  "status": "Completed",
+  "grand_total": "0.01",
+  "form_data": {
+    "purpose": "Cash Disbursement must not accept form_data"
+  },
+  "noted_by_ids": [],
+  "approved_by_ids": [{{approvedById}}],
+  "items": [
+    {
+      "quantity": 1,
+      "description": "Totals are calculated by Laravel",
+      "unit_cost": "100.00",
+      "line_total": "0.01",
+      "remarks": null
+    }
+  ]
+}
+
+
+###############################################################################
+# READ, UPDATE, AND PRINT THE REQUEST CREATED BY REQUEST 6
+###############################################################################
+
+### 10. View the newly created request as its owner
+# Expected: 200 OK
+GET {{host}}/api/v1/request-forms/{{createCash.response.body.$.data.id}}
+Accept: application/json
+Origin: {{origin}}
+
+
+### 11. Update the request and change PHP to EUR
+# Expected: 200 OK
+#
+# updated_at is the optimistic-lock version returned by request 6. If request
+# 6 is run again, REST Client automatically uses the newest response.
+# @name updateCash
+# @prompt xsrfToken Paste the URL-decoded XSRF-TOKEN cookie value
+PATCH {{host}}/api/v1/request-forms/{{createCash.response.body.$.data.id}}/cash-disbursement
+Accept: application/json
+Content-Type: application/json
+Origin: {{origin}}
+X-XSRF-TOKEN: {{xsrfToken}}
+
+{
+  "updated_at": "{{createCash.response.body.$.data.updated_at}}",
+  "kind_of_request": "Professional Fee",
+  "currency": "EUR",
+  "noted_by_ids": [],
+  "approved_by_ids": [{{approvedById}}],
+  "items": [
+    {
+      "quantity": 2,
+      "description": "Updated professional service",
+      "unit_cost": "150.00",
+      "remarks": "Currency changed to EUR"
+    },
+    {
+      "quantity": 1,
+      "description": "Printer ink",
+      "unit_cost": "100.00",
+      "remarks": null
+    }
+  ],
+  "removed_attachment_ids": []
+}
+
+
+### 12. Repeat the old update version: expected 409 Conflict
+# Request 11 changed updated_at. Reusing request 6's older value demonstrates
+# optimistic-lock protection against stale browser tabs.
+# @prompt xsrfToken Paste the URL-decoded XSRF-TOKEN cookie value
+PATCH {{host}}/api/v1/request-forms/{{createCash.response.body.$.data.id}}/cash-disbursement
+Accept: application/json
+Content-Type: application/json
+Origin: {{origin}}
+X-XSRF-TOKEN: {{xsrfToken}}
+
+{
+  "updated_at": "{{createCash.response.body.$.data.updated_at}}",
+  "kind_of_request": "Professional Fee",
+  "currency": "USD",
+  "noted_by_ids": [],
+  "approved_by_ids": [{{approvedById}}],
+  "items": [
+    {
+      "quantity": 1,
+      "description": "This stale update must not overwrite request 11",
+      "unit_cost": "1.00",
+      "remarks": null
+    }
+  ]
+}
+
+
+### 13. Load protected printable data after the successful update
+# Expected: 200 OK with data.currency = EUR and grand_total = 400.00
+GET {{host}}/api/v1/request-forms/{{createCash.response.body.$.data.id}}/print
+Accept: application/json
+Origin: {{origin}}
