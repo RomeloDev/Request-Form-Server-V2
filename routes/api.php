@@ -180,6 +180,10 @@ Route::prefix('v1')->middleware('throttle:60,1')->group(function () {
             '/request-forms/purchase-orders',
             [RequestFormController::class, 'storePurchaseOrder']
         )->middleware('throttle:20,1')->name('request-forms.purchase-orders.store');
+        Route::post(
+            '/request-forms/cash-disbursements',
+            [RequestFormController::class, 'storeCashDisbursement']
+        )->middleware('throttle:20,1')->name('request-forms.cash-disbursements.store');
         Route::get('/request-forms', [RequestFormController::class, 'index'])->name('request-forms.index');
         Route::get('/request-forms/{requestForm}', [RequestFormController::class, 'show'])->missing(
             fn () => response()->json([
@@ -245,11 +249,20 @@ Route::prefix('v1')->middleware('throttle:60,1')->group(function () {
             '/request-forms/{requestForm}/purchase-order',
             [RequestFormController::class, 'updatePurchaseOrder'],
         )
-        ->missing(
-            fn () => response()->json([
-                'message' => 'Request not found.',
-            ], 404),
-        )->name('request-forms.purchase-orders.update');
+            ->missing(
+                fn () => response()->json([
+                    'message' => 'Request not found.',
+                ], 404),
+            )->name('request-forms.purchase-orders.update');
+        Route::patch(
+            '/request-forms/{requestForm}/cash-disbursement',
+            [RequestFormController::class, 'updateCashDisbursement'],
+        )->middleware('throttle:20,1')
+            ->missing(
+                fn () => response()->json([
+                    'message' => 'Request not found.',
+                ], 404),
+            )->name('request-forms.cash-disbursements.update');
         Route::delete(
             '/request-forms/{requestForm}',
             [RequestFormController::class, 'destroy'],

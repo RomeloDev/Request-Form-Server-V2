@@ -21,9 +21,11 @@ use App\Http\Requests\RequestForms\ShowAssignedRequestRequest;
 use App\Http\Requests\RequestForms\ShowMyRequestRequest;
 use App\Http\Requests\RequestForms\ShowPrintableRequestRequest;
 use App\Http\Requests\RequestForms\ShowSharedRequestRequest;
+use App\Http\Requests\RequestForms\StoreCashDisbursementRequest;
 use App\Http\Requests\RequestForms\StorePurchaseOrderRequest;
 use App\Http\Requests\RequestForms\StoreRequestShareRequest;
 use App\Http\Requests\RequestForms\StoreStockRequisitionRequest;
+use App\Http\Requests\RequestForms\UpdateCashDisbursementRequest;
 use App\Http\Requests\RequestForms\UpdatePurchaseOrderRequest;
 use App\Http\Requests\RequestForms\UpdateStockRequisitionRequest;
 use App\Http\Requests\RequestForms\ViewPrintableRequestSignatureRequest;
@@ -39,6 +41,7 @@ use App\Models\RequestApprovalStep;
 use App\Models\RequestAttachment;
 use App\Models\RequestForm;
 use App\Models\User;
+use App\Services\CashDisbursementService;
 use App\Services\PurchaseOrderService;
 use App\Services\RequestApproverCandidateService;
 use App\Services\RequestCancellationService;
@@ -661,6 +664,24 @@ class RequestFormController extends Controller
         return $response;
     }
 
+    public function storeCashDisbursement(
+        StoreCashDisbursementRequest $request,
+        CashDisbursementService $service
+    ): JsonResponse {
+        $requestForm = $service->create(
+            requester: $request->user(),
+            data: $request->validated(),
+        );
+
+        $response = (new RequestFormResource($requestForm))->additional([
+            'message' => 'Cash Disbursement created successfully.',
+        ])->response();
+
+        $response->setStatusCode(Response::HTTP_CREATED);
+
+        return $response;
+    }
+
     public function show(ShowMyRequestRequest $request, RequestForm $requestForm): JsonResponse
     {
         $requestForm->load([
@@ -930,6 +951,24 @@ class RequestFormController extends Controller
         return (new RequestFormResource($updatedRequest))
             ->additional([
                 'message' => 'Purchase Order updated successfully.',
+            ])
+            ->response();
+    }
+
+    public function updateCashDisbursement(
+        UpdateCashDisbursementRequest $request,
+        RequestForm $requestForm,
+        CashDisbursementService $service,
+    ): JsonResponse {
+        $updatedRequest = $service->update(
+            requestForm: $requestForm,
+            requester: $request->user(),
+            data: $request->validated(),
+        );
+
+        return (new RequestFormResource($updatedRequest))
+            ->additional([
+                'message' => 'Cash Disbursement updated successfully.',
             ])
             ->response();
     }
