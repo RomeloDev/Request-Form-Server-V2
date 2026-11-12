@@ -24,6 +24,7 @@ use App\Http\Requests\RequestForms\ShowSharedRequestRequest;
 use App\Http\Requests\RequestForms\StorePurchaseOrderRequest;
 use App\Http\Requests\RequestForms\StoreRequestShareRequest;
 use App\Http\Requests\RequestForms\StoreStockRequisitionRequest;
+use App\Http\Requests\RequestForms\UpdatePurchaseOrderRequest;
 use App\Http\Requests\RequestForms\UpdateStockRequisitionRequest;
 use App\Http\Requests\RequestForms\ViewPrintableRequestSignatureRequest;
 use App\Http\Resources\AssignedRequestResource;
@@ -911,6 +912,24 @@ class RequestFormController extends Controller
         return (new RequestFormResource($updatedRequest))
             ->additional([
                 'message' => 'Stock Requisition updated successfully.',
+            ])
+            ->response();
+    }
+
+    public function updatePurchaseOrder(
+        UpdatePurchaseOrderRequest $request,
+        RequestForm $requestForm,
+        PurchaseOrderService $service,
+    ): JsonResponse {
+        $updatedRequest = $service->update(
+            requestForm: $requestForm,
+            requester: $request->user(),
+            data: $request->validated(),
+        );
+
+        return (new RequestFormResource($updatedRequest))
+            ->additional([
+                'message' => 'Purchase Order updated successfully.',
             ])
             ->response();
     }

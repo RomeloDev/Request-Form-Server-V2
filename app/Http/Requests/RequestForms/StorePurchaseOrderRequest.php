@@ -197,7 +197,7 @@ class StorePurchaseOrderRequest extends FormRequest
         ];
     }
 
-    private const KIND_OPTIONS = [
+    public const KIND_OPTIONS = [
         'Office Supplies',
         'New Registration',
         'Utility Bills (Water, Electric, Guard Salary)',
