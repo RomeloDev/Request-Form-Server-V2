@@ -9,6 +9,7 @@ use App\Http\Controllers\API\V1\Admin\UserController;
 use App\Http\Controllers\API\V1\Auth\LoginController;
 use App\Http\Controllers\API\V1\Auth\ProfileController;
 use App\Http\Controllers\API\V1\Auth\RegisterController;
+use App\Http\Controllers\API\V1\BankController;
 use App\Http\Controllers\API\V1\BranchController;
 use App\Http\Controllers\API\V1\PositionController;
 use App\Http\Controllers\API\V1\RequestFormController;
@@ -317,5 +318,11 @@ Route::prefix('v1')->middleware('throttle:60,1')->group(function () {
             '/suppliers',
             [SupplierController::class, 'index'],
         )->name('suppliers.index');
+
+        // Bank List Endpoint
+        Route::get(
+            '/banks',
+            [BankController::class, 'index'],
+        )->name('banks.index');
     });
 });
