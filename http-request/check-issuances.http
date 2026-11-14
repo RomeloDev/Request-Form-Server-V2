@@ -1,0 +1,533 @@
+@host = http://localhost:8000
+@origin = http://localhost:3001
+
+# Replace these after running the candidate endpoints.
+@approvedById = 0
+@shareRecipientId = 0
+
+# Use these only for requests that cannot be chained automatically.
+@requestId = 0
+@attachmentId = 0
+@signatureOwnerId = 0
+@approvalStepId = 0
+@approvalAttachmentId = 0
+
+###############################################################################
+# CHECK ISSUANCE REQUISITION SLIP — MANUAL API WORKFLOW
+###############################################################################
+
+# Automated coverage for this collection lives in:
+# - ListBanksTest
+# - CheckIssuanceEndpointSecurityTest
+# - CheckIssuanceLifecycleTest
+# - CheckIssuanceReadPrintTest
+# - CheckIssuanceServiceTest
+#
+# Start Laravel:
+#   php artisan serve --host=127.0.0.1 --port=8000
+#
+# VS Code REST Client keeps cookies for the same host. For mutations:
+# 1. Refresh the Sanctum CSRF cookie.
+# 2. Copy and URL-decode XSRF-TOKEN.
+# 3. Paste it when xsrfToken is prompted.
+#
+# Never send requester_id, branch_id, form_type, currency, status,
+# request_code, grand_total, line_total, or approval-step metadata.
+
+
+###############################################################################
+# AUTHENTICATION AND DISCOVERY
+###############################################################################
+
+### 1. Guest create: expected 401 Unauthorized
+POST {{host}}/api/v1/request-forms/check-issuances
+Accept: application/json
+Content-Type: application/json
+
+{}
+
+
+### 2. Start or refresh the Sanctum CSRF session
+GET {{host}}/sanctum/csrf-cookie
+Accept: application/json
+Origin: {{origin}}
+
+
+### 3. Sign in as the requester
+# @prompt requesterLogin Enter the requester username, email, or employee ID
+# @prompt requesterPassword Enter the requester password
+# @prompt xsrfToken Paste the URL-decoded XSRF-TOKEN cookie value
+POST {{host}}/api/v1/login
+Accept: application/json
+Content-Type: application/json
+Origin: {{origin}}
+X-XSRF-TOKEN: {{xsrfToken}}
+
+{
+  "email": "{{requesterLogin}}",
+  "password": "{{requesterPassword}}"
+}
+
+
+### 4. Confirm the requester session
+GET {{host}}/api/v1/profile
+Accept: application/json
+Origin: {{origin}}
+
+
+### 5. List eligible approval candidates
+# Copy one data[].id into approvedById above.
+GET {{host}}/api/v1/request-forms/approver-candidates?page=1&per_page=50&sort=firstname&direction=asc
+Accept: application/json
+Origin: {{origin}}
+
+
+### 6. Search the protected Bank suggestions
+GET {{host}}/api/v1/banks?search=bank&page=1&per_page=20
+Accept: application/json
+Origin: {{origin}}
+
+
+###############################################################################
+# CREATE AND VALIDATION
+###############################################################################
+
+### 7. Create a Check Issuance request
+# Expected: 201, PHP currency, CIRS request code, grand_total = 260.85.
+# @name createCheck
+# @prompt xsrfToken Paste the URL-decoded XSRF-TOKEN cookie value
+POST {{host}}/api/v1/request-forms/check-issuances
+Accept: application/json
+Content-Type: application/json
+Origin: {{origin}}
+X-XSRF-TOKEN: {{xsrfToken}}
+
+{
+  "kind_of_request": "Office Supplies",
+  "form_data": {
+    "payee": "Example Payee",
+    "bank": "Example Bank",
+    "account_no": "0012-3456-7890",
+    "swift_code": "EXAMPHMM"
+  },
+  "noted_by_ids": [],
+  "approved_by_ids": [{{approvedById}}],
+  "items": [
+    {
+      "quantity": 2,
+      "description": "First payment item",
+      "unit_cost": "100.20",
+      "remarks": "For Accounting"
+    },
+    {
+      "quantity": 3,
+      "description": "Second payment item",
+      "unit_cost": "20.15",
+      "remarks": null
+    }
+  ]
+}
+
+
+### 8. Create with a private attachment (multipart example)
+# Change the file path before running. Expected: 201 Created.
+# @name createCheckWithAttachment
+# @prompt xsrfToken Paste the URL-decoded XSRF-TOKEN cookie value
+POST {{host}}/api/v1/request-forms/check-issuances
+Accept: application/json
+Content-Type: multipart/form-data; boundary=CheckIssuanceBoundary
+Origin: {{origin}}
+X-XSRF-TOKEN: {{xsrfToken}}
+
+--CheckIssuanceBoundary
+Content-Disposition: form-data; name="kind_of_request"
+
+Office Supplies
+--CheckIssuanceBoundary
+Content-Disposition: form-data; name="form_data[payee]"
+
+Attached Payee
+--CheckIssuanceBoundary
+Content-Disposition: form-data; name="form_data[bank]"
+
+Attached Bank
+--CheckIssuanceBoundary
+Content-Disposition: form-data; name="form_data[account_no]"
+
+000011112222
+--CheckIssuanceBoundary
+Content-Disposition: form-data; name="form_data[swift_code]"
+
+ATTAPHMM
+--CheckIssuanceBoundary
+Content-Disposition: form-data; name="approved_by_ids[0]"
+
+{{approvedById}}
+--CheckIssuanceBoundary
+Content-Disposition: form-data; name="items[0][quantity]"
+
+1
+--CheckIssuanceBoundary
+Content-Disposition: form-data; name="items[0][description]"
+
+Payment supported by an attachment
+--CheckIssuanceBoundary
+Content-Disposition: form-data; name="items[0][unit_cost]"
+
+500.00
+--CheckIssuanceBoundary
+Content-Disposition: form-data; name="items[0][remarks]"
+
+Manual multipart test
+--CheckIssuanceBoundary
+Content-Disposition: form-data; name="attachments[0]"; filename="support.pdf"
+Content-Type: application/pdf
+
+< C:/replace/this/path/support.pdf
+--CheckIssuanceBoundary--
+
+
+### 9. Reject server-owned and unrelated fields: expected 422
+# @prompt xsrfToken Paste the URL-decoded XSRF-TOKEN cookie value
+POST {{host}}/api/v1/request-forms/check-issuances
+Accept: application/json
+Content-Type: application/json
+Origin: {{origin}}
+X-XSRF-TOKEN: {{xsrfToken}}
+
+{
+  "kind_of_request": "Office Supplies",
+  "currency": "USD",
+  "requester_id": 999999,
+  "branch_id": 999999,
+  "form_type": "Cash Disbursement Requisition Slip",
+  "status": "Completed",
+  "grand_total": "0.01",
+  "form_data": {
+    "payee": "Injected Payee",
+    "bank": "Injected Bank",
+    "account_no": "1",
+    "swift_code": null,
+    "supplier": "Does not apply"
+  },
+  "approved_by_ids": [{{approvedById}}],
+  "items": [
+    {
+      "quantity": 1,
+      "description": "Injected total",
+      "unit_cost": "100.00",
+      "line_total": "0.01",
+      "remarks": null
+    }
+  ]
+}
+
+
+###############################################################################
+# OWNER READ, UPDATE, ATTACHMENT, PRINT, CANCEL, AND DELETE
+###############################################################################
+
+### 10. List the requester's requests
+GET {{host}}/api/v1/request-forms?page=1&per_page=20
+Accept: application/json
+Origin: {{origin}}
+
+
+### 11. Show the request created by request 7
+GET {{host}}/api/v1/request-forms/{{createCheck.response.body.$.data.id}}
+Accept: application/json
+Origin: {{origin}}
+
+
+### 12. Update the untouched Pending request
+# Swift Code is intentionally omitted to verify it becomes null.
+# @name updateCheck
+# @prompt xsrfToken Paste the URL-decoded XSRF-TOKEN cookie value
+PATCH {{host}}/api/v1/request-forms/{{createCheck.response.body.$.data.id}}/check-issuance
+Accept: application/json
+Content-Type: application/json
+Origin: {{origin}}
+X-XSRF-TOKEN: {{xsrfToken}}
+
+{
+  "updated_at": "{{createCheck.response.body.$.data.updated_at}}",
+  "kind_of_request": "Professional Fee",
+  "form_data": {
+    "payee": "Updated Payee",
+    "bank": "Updated Bank",
+    "account_no": "00009999"
+  },
+  "noted_by_ids": [],
+  "approved_by_ids": [{{approvedById}}],
+  "items": [
+    {
+      "quantity": 2,
+      "description": "Updated service",
+      "unit_cost": "150.00",
+      "remarks": null
+    },
+    {
+      "quantity": 1,
+      "description": "Processing fee",
+      "unit_cost": "100.00",
+      "remarks": null
+    }
+  ],
+  "removed_attachment_ids": []
+}
+
+
+### 13. Reuse the stale version from request 7: expected 409 Conflict
+# @prompt xsrfToken Paste the URL-decoded XSRF-TOKEN cookie value
+PATCH {{host}}/api/v1/request-forms/{{createCheck.response.body.$.data.id}}/check-issuance
+Accept: application/json
+Content-Type: application/json
+Origin: {{origin}}
+X-XSRF-TOKEN: {{xsrfToken}}
+
+{
+  "updated_at": "{{createCheck.response.body.$.data.updated_at}}",
+  "kind_of_request": "Professional Fee",
+  "form_data": {
+    "payee": "Stale Payee",
+    "bank": "Stale Bank",
+    "account_no": "1",
+    "swift_code": null
+  },
+  "noted_by_ids": [],
+  "approved_by_ids": [{{approvedById}}],
+  "items": [
+    {
+      "quantity": 1,
+      "description": "Must not overwrite request 12",
+      "unit_cost": "1.00",
+      "remarks": null
+    }
+  ]
+}
+
+
+### 14. Print the updated Check Issuance
+# Expected form_data contains payee, bank, account_no, and nullable swift_code.
+GET {{host}}/api/v1/request-forms/{{createCheck.response.body.$.data.id}}/print
+Accept: application/json
+Origin: {{origin}}
+
+
+### 15. Load an authorized printable signature image
+# signatureOwnerId must be the requester or an approver on requestId.
+GET {{host}}/api/v1/request-forms/{{requestId}}/print/signatures/{{signatureOwnerId}}
+Accept: image/*
+Origin: {{origin}}
+
+
+### 16. Preview an authorized private request attachment
+# Use requestId and attachmentId above, or substitute response IDs manually.
+GET {{host}}/api/v1/request-forms/{{requestId}}/attachments/{{attachmentId}}/preview
+Accept: application/json
+Origin: {{origin}}
+
+
+### 17. Download an authorized private request attachment
+GET {{host}}/api/v1/request-forms/{{requestId}}/attachments/{{attachmentId}}/download
+Accept: application/octet-stream
+Origin: {{origin}}
+
+
+### 18. Preview a delegated approval attachment
+GET {{host}}/api/v1/request-forms/{{requestId}}/approval-steps/{{approvalStepId}}/attachments/{{approvalAttachmentId}}/preview
+Accept: image/*
+Origin: {{origin}}
+
+
+### 19. Download a delegated approval attachment
+GET {{host}}/api/v1/request-forms/{{requestId}}/approval-steps/{{approvalStepId}}/attachments/{{approvalAttachmentId}}/download
+Accept: application/octet-stream
+Origin: {{origin}}
+
+
+### 20. Cancel an eligible request
+# Use a separate Pending/Ongoing request ID so the main workflow remains usable.
+# @prompt cancelRequestId Enter an owned Pending or Ongoing Check request ID
+# @prompt xsrfToken Paste the URL-decoded XSRF-TOKEN cookie value
+PATCH {{host}}/api/v1/request-forms/{{cancelRequestId}}/cancel
+Accept: application/json
+Content-Type: application/json
+Origin: {{origin}}
+X-XSRF-TOKEN: {{xsrfToken}}
+
+{
+  "cancellation_reason": "Canceled during manual Check Issuance regression."
+}
+
+
+### 21. Delete an eligible request
+# Use a separate untouched Pending or Disapproved request ID.
+# @prompt deleteRequestId Enter an owned deletable Check request ID
+# @prompt xsrfToken Paste the URL-decoded XSRF-TOKEN cookie value
+DELETE {{host}}/api/v1/request-forms/{{deleteRequestId}}
+Accept: application/json
+Origin: {{origin}}
+X-XSRF-TOKEN: {{xsrfToken}}
+
+
+###############################################################################
+# SHARING — OWNER OPERATIONS
+###############################################################################
+
+# Sharing is allowed only after the request is Completed. Complete the request
+# through the approval workflow below, then sign back in as the requester.
+
+### 22. List eligible share candidates
+GET {{host}}/api/v1/request-forms/{{requestId}}/share-candidates?page=1&per_page=20
+Accept: application/json
+Origin: {{origin}}
+
+
+### 23. Share a Completed request
+# @prompt xsrfToken Paste the URL-decoded XSRF-TOKEN cookie value
+POST {{host}}/api/v1/request-forms/{{requestId}}/shares
+Accept: application/json
+Content-Type: application/json
+Origin: {{origin}}
+X-XSRF-TOKEN: {{xsrfToken}}
+
+{
+  "user_ids": [{{shareRecipientId}}]
+}
+
+
+### 24. List recipients
+GET {{host}}/api/v1/request-forms/{{requestId}}/shares?page=1&per_page=20
+Accept: application/json
+Origin: {{origin}}
+
+
+### 25. Revoke a recipient
+# @prompt xsrfToken Paste the URL-decoded XSRF-TOKEN cookie value
+DELETE {{host}}/api/v1/request-forms/{{requestId}}/shares/{{shareRecipientId}}
+Accept: application/json
+Origin: {{origin}}
+X-XSRF-TOKEN: {{xsrfToken}}
+
+
+###############################################################################
+# APPROVER WORKFLOW — SIGN IN AS THE SELECTED APPROVER
+###############################################################################
+
+### 26. Refresh CSRF before changing accounts
+GET {{host}}/sanctum/csrf-cookie
+Accept: application/json
+Origin: {{origin}}
+
+
+### 27. Sign in as the user represented by approvedById
+# @prompt approverLogin Enter the approver username, email, or employee ID
+# @prompt approverPassword Enter the approver password
+# @prompt xsrfToken Paste the URL-decoded XSRF-TOKEN cookie value
+POST {{host}}/api/v1/login
+Accept: application/json
+Content-Type: application/json
+Origin: {{origin}}
+X-XSRF-TOKEN: {{xsrfToken}}
+
+{
+  "email": "{{approverLogin}}",
+  "password": "{{approverPassword}}"
+}
+
+
+### 28. List currently actionable and historical assignments
+GET {{host}}/api/v1/approver/request-forms?page=1&per_page=50
+Accept: application/json
+Origin: {{origin}}
+
+
+### 29. Show the assigned Check Issuance
+GET {{host}}/api/v1/approver/request-forms/{{requestId}}
+Accept: application/json
+Origin: {{origin}}
+
+
+### 30. Approve the current step
+# @prompt xsrfToken Paste the URL-decoded XSRF-TOKEN cookie value
+PATCH {{host}}/api/v1/approver/request-forms/{{requestId}}/decision
+Accept: application/json
+Content-Type: application/json
+Origin: {{origin}}
+X-XSRF-TOKEN: {{xsrfToken}}
+
+{
+  "action": "approve",
+  "comment": "Approved during manual Check Issuance regression."
+}
+
+
+### 31. Approve as delegated AVP staff with a private image attachment
+# Run this only while signed in as the delegated staff member for a request
+# whose current step type is delegated_approval. Copy the returned step and
+# attachment IDs into approvalStepId and approvalAttachmentId above.
+# @prompt delegatedRequestId Enter the delegated Check request ID
+# @prompt xsrfToken Paste the URL-decoded XSRF-TOKEN cookie value
+POST {{host}}/api/v1/approver/request-forms/{{delegatedRequestId}}/decision
+Accept: application/json
+Content-Type: multipart/form-data; boundary=DelegatedApprovalBoundary
+Origin: {{origin}}
+X-XSRF-TOKEN: {{xsrfToken}}
+
+--DelegatedApprovalBoundary
+Content-Disposition: form-data; name="_method"
+
+PATCH
+--DelegatedApprovalBoundary
+Content-Disposition: form-data; name="action"
+
+approve
+--DelegatedApprovalBoundary
+Content-Disposition: form-data; name="comment"
+
+Reviewed by delegated AVP staff.
+--DelegatedApprovalBoundary
+Content-Disposition: form-data; name="attachments[0]"; filename="signed-check-review.png"
+Content-Type: image/png
+
+< C:/replace/this/path/signed-check-review.png
+--DelegatedApprovalBoundary--
+
+
+### 32. Disapprove instead (use a separate current assignment)
+# @prompt disapproveRequestId Enter a request ID currently assigned to this approver
+# @prompt xsrfToken Paste the URL-decoded XSRF-TOKEN cookie value
+PATCH {{host}}/api/v1/approver/request-forms/{{disapproveRequestId}}/decision
+Accept: application/json
+Content-Type: application/json
+Origin: {{origin}}
+X-XSRF-TOKEN: {{xsrfToken}}
+
+{
+  "action": "disapprove",
+  "comment": "Account details require correction."
+}
+
+
+###############################################################################
+# SHARED RECIPIENT WORKFLOW — SIGN IN AS shareRecipientId
+###############################################################################
+
+### 33. List requests shared with the authenticated recipient
+GET {{host}}/api/v1/shared-requests?page=1&per_page=20
+Accept: application/json
+Origin: {{origin}}
+
+
+### 34. Show a shared Check Issuance request
+GET {{host}}/api/v1/shared-requests/{{requestId}}
+Accept: application/json
+Origin: {{origin}}
+
+
+### 35. Print the shared request
+GET {{host}}/api/v1/request-forms/{{requestId}}/print
+Accept: application/json
+Origin: {{origin}}
+

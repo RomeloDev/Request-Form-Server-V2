@@ -23,8 +23,19 @@ class PrintableRequestResource extends JsonResource
             'status' => $this->status->value,
             'purpose' => data_get($this->form_data, 'purpose', ''),
             'form_data' => $this->when(
-                $this->form_type === RequestFormType::PurchaseOrder,
-                fn (): array => $this->purchaseOrderFormData(),
+                in_array(
+                    $this->form_type,
+                    [
+                        RequestFormType::PurchaseOrder,
+                        RequestFormType::CheckIssuance,
+                    ],
+                    true,
+                ),
+                fn (): array => match ($this->form_type) {
+                    RequestFormType::PurchaseOrder => $this->purchaseOrderFormData(),
+                    RequestFormType::CheckIssuance => $this->checkIssuanceFormData(),
+                    default => [],
+                },
             ),
             'grand_total' => $this->grand_total,
 
@@ -84,6 +95,39 @@ class PrintableRequestResource extends JsonResource
         return [
             'supplier' => is_string($supplier) ? trim($supplier) : '',
             'address' => is_string($address) ? trim($address) : '',
+        ];
+    }
+
+    /**
+     * Return only the Check Issuance fields required by its print template.
+     *
+     * @return array{
+     *     payee: string,
+     *     bank: string,
+     *     account_no: string,
+     *     swift_code: string|null
+     * }
+     */
+    private function checkIssuanceFormData(): array
+    {
+        $payee = data_get($this->form_data, 'payee');
+        $bank = data_get($this->form_data, 'bank');
+        $accountNumber = data_get($this->form_data, 'account_no');
+        $swiftCode = data_get($this->form_data, 'swift_code');
+
+        $normalizedSwiftCode = is_string($swiftCode)
+            ? trim($swiftCode)
+            : '';
+
+        return [
+            'payee' => is_string($payee) ? trim($payee) : '',
+            'bank' => is_string($bank) ? trim($bank) : '',
+            'account_no' => is_string($accountNumber)
+                ? trim($accountNumber)
+                : '',
+            'swift_code' => $normalizedSwiftCode !== ''
+                ? $normalizedSwiftCode
+                : null,
         ];
     }
 }
