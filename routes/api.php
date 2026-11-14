@@ -324,5 +324,12 @@ Route::prefix('v1')->middleware('throttle:60,1')->group(function () {
             '/banks',
             [BankController::class, 'index'],
         )->name('banks.index');
+
+        // Check Issuance Requisition Slip endpoints
+        Route::post(
+            '/request-forms/check-issuances',
+            [RequestFormController::class, 'storeCheckIssuance'],
+        )->middleware('throttle:20,1')
+            ->name('request-forms.check-issuances.store');
     });
 });

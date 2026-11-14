@@ -22,6 +22,7 @@ use App\Http\Requests\RequestForms\ShowMyRequestRequest;
 use App\Http\Requests\RequestForms\ShowPrintableRequestRequest;
 use App\Http\Requests\RequestForms\ShowSharedRequestRequest;
 use App\Http\Requests\RequestForms\StoreCashDisbursementRequest;
+use App\Http\Requests\RequestForms\StoreCheckIssuanceRequest;
 use App\Http\Requests\RequestForms\StorePurchaseOrderRequest;
 use App\Http\Requests\RequestForms\StoreRequestShareRequest;
 use App\Http\Requests\RequestForms\StoreStockRequisitionRequest;
@@ -42,6 +43,7 @@ use App\Models\RequestAttachment;
 use App\Models\RequestForm;
 use App\Models\User;
 use App\Services\CashDisbursementService;
+use App\Services\CheckIssuanceService;
 use App\Services\PurchaseOrderService;
 use App\Services\RequestApproverCandidateService;
 use App\Services\RequestCancellationService;
@@ -678,6 +680,28 @@ class RequestFormController extends Controller
         ])->response();
 
         $response->setStatusCode(Response::HTTP_CREATED);
+
+        return $response;
+    }
+
+    public function storeCheckIssuance(
+        StoreCheckIssuanceRequest $request,
+        CheckIssuanceService $service,
+    ): JsonResponse {
+        $requestForm = $service->create(
+            requester: $request->user(),
+            data: $request->validated(),
+        );
+
+        $response = (new RequestFormResource($requestForm))
+            ->additional([
+                'message' => 'Check Issuance created successfully.',
+            ])
+            ->response();
+
+        $response->setStatusCode(
+            Response::HTTP_CREATED,
+        );
 
         return $response;
     }
