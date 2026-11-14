@@ -25,5 +25,9 @@ class DatabaseSeeder extends Seeder
         ]);
 
         $user->assignRole('User');
+
+        $this->call([
+            BankSeeder::class,
+        ]);
     }
 }
