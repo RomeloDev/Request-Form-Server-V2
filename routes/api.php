@@ -264,6 +264,16 @@ Route::prefix('v1')->middleware('throttle:60,1')->group(function () {
                     'message' => 'Request not found.',
                 ], 404),
             )->name('request-forms.cash-disbursements.update');
+        Route::patch(
+            '/request-forms/{requestForm}/check-issuance',
+            [RequestFormController::class, 'updateCheckIssuance'],
+        )->middleware('throttle:20,1')
+            ->missing(
+                fn () => response()->json([
+                    'message' => 'Request not found.',
+                ], 404),
+            )
+            ->name('request-forms.check-issuances.update');
         Route::delete(
             '/request-forms/{requestForm}',
             [RequestFormController::class, 'destroy'],
