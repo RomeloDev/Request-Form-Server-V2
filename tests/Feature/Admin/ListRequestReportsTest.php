@@ -240,6 +240,51 @@ class ListRequestReportsTest extends TestCase
             ->assertJsonPath('meta.total', 3);
     }
 
+    public function test_grouped_search_cannot_escape_status_and_branch_filters(): void
+    {
+        $targetBranch = $this->branch('GROUP-TARGET');
+        $otherBranch = $this->branch('GROUP-OTHER');
+        $targetRequester = $this->user($targetBranch);
+        $otherRequester = $this->user($otherBranch);
+
+        $match = $this->requestForm(
+            requester: $targetRequester,
+            branch: $targetBranch,
+            requestCode: 'QUARTERLY-MATCH',
+            status: RequestStatus::Completed,
+        );
+        $this->requestForm(
+            requester: $targetRequester,
+            branch: $targetBranch,
+            requestCode: 'QUARTERLY-WRONG-STATUS',
+            status: RequestStatus::Pending,
+        );
+        $this->requestForm(
+            requester: $otherRequester,
+            branch: $otherBranch,
+            requestCode: 'QUARTERLY-WRONG-BRANCH',
+            status: RequestStatus::Completed,
+        );
+        $this->requestForm(
+            requester: $targetRequester,
+            branch: $targetBranch,
+            requestCode: 'ANNUAL-NONMATCH',
+            status: RequestStatus::Completed,
+        );
+
+        Sanctum::actingAs($this->user($targetBranch, 'Admin'));
+
+        $this->getJson(self::ENDPOINT.'?'.http_build_query([
+            'search' => 'QUARTERLY',
+            'status' => RequestStatus::Completed->value,
+            'branch_id' => $targetBranch->id,
+        ]))
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.id', $match->id)
+            ->assertJsonPath('meta.total', 1);
+    }
+
     public function test_date_filter_uses_complete_asia_manila_business_days(): void
     {
         $branch = $this->branch('DATE');

@@ -1,0 +1,253 @@
+@host = http://localhost:8000
+@origin = http://localhost:3001
+
+# Copy these IDs from a report-detail response before testing file routes.
+@requestId = 0
+@previewAttachmentId = 0
+@downloadAttachmentId = 0
+@approvalStepId = 0
+@approvalAttachmentId = 0
+@signatureOwnerId = 0
+
+###############################################################################
+# ADMIN REPORTS — MANUAL API REGRESSION
+###############################################################################
+
+# Automated execution of every protected endpoint in this collection lives in:
+# - ListRequestReportsTest
+# - ShowRequestReportTest
+# - AdminReportAttachmentAccessTest
+# - AdminReportPrintAccessTest
+# - AdminReportsWorkflowTest
+#
+# Start Laravel:
+#   php artisan serve --host=127.0.0.1 --port=8000
+#
+# VS Code REST Client keeps the Sanctum session cookie for this host.
+# Login first as an existing verified Admin. Report operations are GET-only and
+# must never change request status, totals, approvals, shares, or timestamps.
+
+
+###############################################################################
+# AUTHENTICATION AND AUTHORIZATION
+###############################################################################
+
+### 1. Guest list: expected 401 Unauthorized
+GET {{host}}/api/v1/admin/request-reports
+Accept: application/json
+Origin: {{origin}}
+
+
+### 2. Start or refresh the Sanctum CSRF session
+GET {{host}}/sanctum/csrf-cookie
+Accept: application/json
+Origin: {{origin}}
+
+
+### 3. Sign in as a verified Admin
+# @prompt adminLogin Enter the Admin username, email, or employee ID
+# @prompt adminPassword Enter the Admin password
+# @prompt xsrfToken Paste the URL-decoded XSRF-TOKEN cookie value
+POST {{host}}/api/v1/login
+Accept: application/json
+Content-Type: application/json
+Origin: {{origin}}
+X-XSRF-TOKEN: {{xsrfToken}}
+
+{
+  "email": "{{adminLogin}}",
+  "password": "{{adminPassword}}"
+}
+
+
+### 4. Confirm the Admin session
+GET {{host}}/api/v1/profile
+Accept: application/json
+Origin: {{origin}}
+
+
+###############################################################################
+# REPORT LIST
+###############################################################################
+
+### 5. Default paginated report list: expected 200
+GET {{host}}/api/v1/admin/request-reports?page=1&per_page=20
+Accept: application/json
+Origin: {{origin}}
+
+
+### 6. Search, filter, sort, and paginate: expected 200
+# Dates are interpreted as complete Asia/Manila business days.
+GET {{host}}/api/v1/admin/request-reports?search=CIRS&status=Completed&form_type=Check%20Issuance%20Requisition%20Slip&date_from=2026-11-01&date_to=2026-11-30&sort=created_at&direction=desc&page=1&per_page=20
+Accept: application/json
+Origin: {{origin}}
+
+
+### 7. Branch filter: expected 200
+# @prompt branchId Enter an existing branch ID
+GET {{host}}/api/v1/admin/request-reports?branch_id={{branchId}}&status=ALL&form_type=ALL&page=1&per_page=10
+Accept: application/json
+Origin: {{origin}}
+
+
+### 8. Invalid and server-owned filters: expected 422
+GET {{host}}/api/v1/admin/request-reports?status=Approved&sort=requester_id&direction=sideways&page=0&per_page=51&requester_id=1&include_deleted=1
+Accept: application/json
+Origin: {{origin}}
+
+
+### 9. Reversed date range: expected 422
+GET {{host}}/api/v1/admin/request-reports?date_from=2026-11-30&date_to=2026-11-01
+Accept: application/json
+Origin: {{origin}}
+
+
+###############################################################################
+# REPORT DETAILS
+###############################################################################
+
+### 10. Show one report: expected 200
+# Copy data.id from request 5 into requestId above.
+GET {{host}}/api/v1/admin/request-reports/{{requestId}}
+Accept: application/json
+Origin: {{origin}}
+
+
+### 11. Detail identity override: expected 422
+GET {{host}}/api/v1/admin/request-reports/{{requestId}}?requester_id=1&branch_id=1&include_deleted=1
+Accept: application/json
+Origin: {{origin}}
+
+
+### 12. Missing report: expected 404
+GET {{host}}/api/v1/admin/request-reports/999999999
+Accept: application/json
+Origin: {{origin}}
+
+
+###############################################################################
+# PRIVATE REQUEST AND APPROVAL ATTACHMENTS
+###############################################################################
+
+### 13. Preview PDF/image request attachment: expected 200
+GET {{host}}/api/v1/request-forms/{{requestId}}/attachments/{{previewAttachmentId}}/preview
+Accept: application/octet-stream
+Origin: {{origin}}
+
+
+### 14. Download DOCX/XLSX request attachment: expected 200
+GET {{host}}/api/v1/request-forms/{{requestId}}/attachments/{{downloadAttachmentId}}/download
+Accept: application/octet-stream
+Origin: {{origin}}
+
+
+### 15. Preview approval image attachment: expected 200
+GET {{host}}/api/v1/request-forms/{{requestId}}/approval-steps/{{approvalStepId}}/attachments/{{approvalAttachmentId}}/preview
+Accept: image/*
+Origin: {{origin}}
+
+
+### 16. Download approval image attachment: expected 200
+GET {{host}}/api/v1/request-forms/{{requestId}}/approval-steps/{{approvalStepId}}/attachments/{{approvalAttachmentId}}/download
+Accept: application/octet-stream
+Origin: {{origin}}
+
+
+### 17. Reject client-selected storage path: expected 422
+GET {{host}}/api/v1/request-forms/{{requestId}}/attachments/{{previewAttachmentId}}/preview?disk=public&path=signatures%2Fprivate.png&attachment_id=1
+Accept: application/json
+Origin: {{origin}}
+
+
+### 18. Cross-request attachment ID: expected 404
+# @prompt otherRequestAttachmentId Enter an attachment ID owned by another request
+GET {{host}}/api/v1/request-forms/{{requestId}}/attachments/{{otherRequestAttachmentId}}/preview
+Accept: application/json
+Origin: {{origin}}
+
+
+###############################################################################
+# PRINT AND SIGNATURES
+###############################################################################
+
+### 19. Protected printable request data: expected 200
+GET {{host}}/api/v1/request-forms/{{requestId}}/print
+Accept: application/json
+Origin: {{origin}}
+
+
+### 20. Requester or approved-approver signature: expected 200 image/png
+GET {{host}}/api/v1/request-forms/{{requestId}}/print/signatures/{{signatureOwnerId}}
+Accept: image/png
+Origin: {{origin}}
+
+
+### 21. Unrelated or Pending approver signature: expected 404
+# @prompt unrelatedSignatureOwnerId Enter an unrelated or Pending approver user ID
+GET {{host}}/api/v1/request-forms/{{requestId}}/print/signatures/{{unrelatedSignatureOwnerId}}
+Accept: application/json
+Origin: {{origin}}
+
+
+### 22. Print identity override: expected 422
+GET {{host}}/api/v1/request-forms/{{requestId}}/print?user_id=1&requester_id=1&branch_id=1
+Accept: application/json
+Origin: {{origin}}
+
+
+###############################################################################
+# NON-ADMIN DENIAL
+###############################################################################
+
+### 23. Log out the Admin session: expected 204
+# @prompt xsrfToken Paste the current URL-decoded XSRF-TOKEN cookie value
+POST {{host}}/api/v1/logout
+Accept: application/json
+Origin: {{origin}}
+X-XSRF-TOKEN: {{xsrfToken}}
+
+
+### 24. Refresh CSRF before signing in as a non-Admin
+GET {{host}}/sanctum/csrf-cookie
+Accept: application/json
+Origin: {{origin}}
+
+
+### 25. Sign in as a verified ordinary User
+# @prompt userLogin Enter the ordinary User username, email, or employee ID
+# @prompt userPassword Enter the User password
+# @prompt xsrfToken Paste the newest URL-decoded XSRF-TOKEN cookie value
+POST {{host}}/api/v1/login
+Accept: application/json
+Content-Type: application/json
+Origin: {{origin}}
+X-XSRF-TOKEN: {{xsrfToken}}
+
+{
+  "email": "{{userLogin}}",
+  "password": "{{userPassword}}"
+}
+
+
+### 26. Non-Admin report list: expected 403
+GET {{host}}/api/v1/admin/request-reports
+Accept: application/json
+Origin: {{origin}}
+
+
+### 27. Non-Admin report detail: expected 403
+GET {{host}}/api/v1/admin/request-reports/{{requestId}}
+Accept: application/json
+Origin: {{origin}}
+
+
+### 28. Unrelated non-Admin attachment preview: expected 403
+GET {{host}}/api/v1/request-forms/{{requestId}}/attachments/{{previewAttachmentId}}/preview
+Accept: application/json
+Origin: {{origin}}
+
+
+### 29. Unrelated non-Admin print: expected 403
+GET {{host}}/api/v1/request-forms/{{requestId}}/print
+Accept: application/json
+Origin: {{origin}}

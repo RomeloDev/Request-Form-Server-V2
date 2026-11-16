@@ -138,8 +138,11 @@ class RequestFormPolicy
      */
     public function viewAttachment(User $user, RequestForm $requestForm): bool
     {
+        if ($user->hasRole('Admin')) {
+            return true;
+        }
+
         if (! $user->hasAnyRole([
-            'Admin',
             'User',
             'approver',
         ])) {
@@ -172,8 +175,11 @@ class RequestFormPolicy
         User $user,
         RequestForm $requestForm
     ): bool {
+        if ($user->hasRole('Admin')) {
+            return true;
+        }
+
         if (! $user->hasAnyRole([
-            'Admin',
             'User',
             'approver',
         ])) {

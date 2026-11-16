@@ -38,6 +38,9 @@ class AccessRequestAttachmentRequest extends FormRequest
             'user_id' => ['prohibited'],
             'requester_id' => ['prohibited'],
             'branch_id' => ['prohibited'],
+            'attachment_id' => ['prohibited'],
+            'disk' => ['prohibited'],
+            'path' => ['prohibited'],
         ];
     }
 }
