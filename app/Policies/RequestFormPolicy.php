@@ -293,4 +293,14 @@ class RequestFormPolicy
         ]) && (int) $requestForm->requester_id ===
             (int) $user->getKey();
     }
+
+    public function viewReports(User $user): bool
+    {
+        return $user->hasRole('Admin');
+    }
+
+    public function viewReport(User $user, RequestForm $requestForm): bool
+    {
+        return $user->hasRole('Admin');
+    }
 }
