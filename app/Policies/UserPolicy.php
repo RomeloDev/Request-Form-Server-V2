@@ -43,6 +43,11 @@ class UserPolicy
         return $user->hasRole('Admin');
     }
 
+    public function changePassword(User $user, User $profile): bool
+    {
+        return $user->is($profile);
+    }
+
     /**
      * Determine whether the user can delete the model.
      */

@@ -9,6 +9,7 @@ use App\Http\Controllers\API\V1\Admin\RequestReportController;
 use App\Http\Controllers\API\V1\Admin\UserController;
 use App\Http\Controllers\API\V1\Auth\LoginController;
 use App\Http\Controllers\API\V1\Auth\ProfileController;
+use App\Http\Controllers\API\V1\Auth\ProfilePasswordController;
 use App\Http\Controllers\API\V1\Auth\RegisterController;
 use App\Http\Controllers\API\V1\BankController;
 use App\Http\Controllers\API\V1\BranchController;
@@ -373,5 +374,9 @@ Route::prefix('v1')->middleware('throttle:60,1')->group(function () {
             '/profile/picture',
             [ProfileController::class, 'destroyPicture'],
         )->middleware('throttle:10,1');
+        Route::put(
+            '/profile/password',
+            [ProfilePasswordController::class, 'update'],
+        )->middleware('throttle:5,1');
     });
 });
