@@ -66,4 +66,9 @@ class UserPolicy
     {
         return false;
     }
+
+    public function manageProfilePicture(User $user, User $profile): bool
+    {
+        return $user->is($profile);
+    }
 }

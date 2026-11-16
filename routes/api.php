@@ -359,5 +359,19 @@ Route::prefix('v1')->middleware('throttle:60,1')->group(function () {
                 ], 404),
             )
             ->name('admin.request-reports.show');
+
+        // Profile Page endpoints
+        Route::get(
+            '/profile/picture',
+            [ProfileController::class, 'showPicture'],
+        );
+        Route::post(
+            '/profile/picture',
+            [ProfileController::class, 'updatePicture'],
+        )->middleware('throttle:10,1');
+        Route::delete(
+            '/profile/picture',
+            [ProfileController::class, 'destroyPicture'],
+        )->middleware('throttle:10,1');
     });
 });
