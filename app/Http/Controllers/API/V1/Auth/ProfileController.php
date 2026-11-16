@@ -3,8 +3,10 @@
 namespace App\Http\Controllers\API\V1\Auth;
 
 use App\Http\Controllers\Controller;
+use App\Http\Resources\ProfileResource;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Gate;
 
 class ProfileController extends Controller
 {
@@ -12,16 +14,18 @@ class ProfileController extends Controller
     {
         $user = $request->user();
 
-        // Load the Spatie assignment and preserve the existing API contract.
-        $user->loadMissing('roles');
-        $user->setAttribute('role', $user->getRoleNames()->first());
+        Gate::authorize('viewProfile', $user);
 
-        // The frontend needs one role string, not the relationship array.
-        $user->unsetRelation('roles');
-
-        return response()->json([
-            'status' => true,
-            'data' => $user,
+        $user->loadMissing([
+            'roles:id,name',
+            'assignedBranch:id,branch_code,branch_name,branch',
+            'positionRecord:id,label,value',
         ]);
+
+        return (new ProfileResource($user))
+            ->additional([
+                'status' => true,
+            ])
+            ->response();
     }
 }

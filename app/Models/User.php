@@ -84,6 +84,15 @@ class User extends Authenticatable
         );
     }
 
+    public function positionRecord(): BelongsTo
+    {
+        return $this->belongsTo(
+            Position::class,
+            'position',
+            'value',
+        );
+    }
+
     /**
      * Requests submitted by this user.
      */

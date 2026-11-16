@@ -22,6 +22,11 @@ class UserPolicy
         return false;
     }
 
+    public function viewProfile(User $user, User $profile): bool
+    {
+        return $user->is($profile);
+    }
+
     /**
      * Determine whether the user can create models.
      */
