@@ -5,6 +5,7 @@ use App\Http\Controllers\API\V1\Admin\AvpStaffController;
 use App\Http\Controllers\API\V1\Admin\BranchController as AdminBranchController;
 use App\Http\Controllers\API\V1\Admin\BranchHeadController;
 use App\Http\Controllers\API\V1\Admin\PositionController as AdminPositionController;
+use App\Http\Controllers\API\V1\Admin\RequestReportController;
 use App\Http\Controllers\API\V1\Admin\UserController;
 use App\Http\Controllers\API\V1\Auth\LoginController;
 use App\Http\Controllers\API\V1\Auth\ProfileController;
@@ -341,5 +342,11 @@ Route::prefix('v1')->middleware('throttle:60,1')->group(function () {
             [RequestFormController::class, 'storeCheckIssuance'],
         )->middleware('throttle:20,1')
             ->name('request-forms.check-issuances.store');
+
+        // Admin Reports endpoint
+        Route::get(
+            '/admin/request-reports',
+            [RequestReportController::class, 'index'],
+        )->name('admin.request-reports.index');
     });
 });
