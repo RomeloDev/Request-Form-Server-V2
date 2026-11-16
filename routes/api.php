@@ -348,5 +348,16 @@ Route::prefix('v1')->middleware('throttle:60,1')->group(function () {
             '/admin/request-reports',
             [RequestReportController::class, 'index'],
         )->name('admin.request-reports.index');
+        Route::get(
+            '/admin/request-reports/{requestForm}',
+            [RequestReportController::class, 'show'],
+        )
+            ->whereNumber('requestForm')
+            ->missing(
+                fn () => response()->json([
+                    'message' => 'Request report not found.',
+                ], 404),
+            )
+            ->name('admin.request-reports.show');
     });
 });

@@ -4,6 +4,8 @@ namespace App\Http\Controllers\API\V1\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\RequestForms\ListRequestReportsRequest;
+use App\Http\Requests\RequestForms\ShowRequestReportRequest;
+use App\Http\Resources\RequestFormResource;
 use App\Http\Resources\RequestReportResource;
 use App\Models\RequestForm;
 use Carbon\CarbonImmutable;
@@ -120,6 +122,24 @@ class RequestReportController extends Controller
         return RequestReportResource::collection($reports)
             ->additional([
                 'message' => 'Request reports retrieved successfully.',
+            ])
+            ->response();
+    }
+
+    public function show(ShowRequestReportRequest $request, RequestForm $requestForm): JsonResponse
+    {
+        $requestForm->load([
+            'requester',
+            'branch',
+            'items',
+            'attachments',
+            'approvalSteps.approver',
+            'approvalSteps.attachments',
+        ]);
+
+        return (new RequestFormResource($requestForm))
+            ->additional([
+                'message' => 'Request report retrieved successfully.',
             ])
             ->response();
     }
