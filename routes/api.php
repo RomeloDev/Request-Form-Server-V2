@@ -371,7 +371,7 @@ Route::prefix('v1')->middleware('throttle:60,1')->group(function () {
         Route::post(
             '/profile/picture',
             [ProfileController::class, 'updatePicture'],
-        )->middleware('throttle:10,1')
+        )->middleware('throttle:20,1')
             ->name('profile.picture.update');
         Route::delete(
             '/profile/picture',
@@ -385,17 +385,17 @@ Route::prefix('v1')->middleware('throttle:60,1')->group(function () {
         Route::post(
             '/profile/signature',
             [ProfileSignatureController::class, 'update'],
-        )->middleware('throttle:10,1')
+        )->middleware('throttle:20,1')
             ->name('profile.signature.update');
         Route::delete(
             '/profile/signature',
             [ProfileSignatureController::class, 'destroy'],
-        )->middleware('throttle:10,1')
+        )->middleware('throttle:20,1')
             ->name('profile.signature.destroy');
         Route::put(
             '/profile/password',
             [ProfilePasswordController::class, 'update'],
-        )->middleware('throttle:5,1')
+        )->middleware('throttle:20,1')
             ->name('profile.password.update');
     });
 });
