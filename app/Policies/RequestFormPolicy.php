@@ -20,6 +20,22 @@ class RequestFormPolicy
     }
 
     /**
+     * Determine whether the user may view the authenticated dashboard.
+     *
+     * Only the approved application roles may access it. The dashboard is
+     * always scoped to the authenticated user, so this ability takes no
+     * target model and never accepts a client-supplied identity.
+     */
+    public function viewDashboard(User $user): bool
+    {
+        return $user->hasAnyRole([
+            'Admin',
+            'User',
+            'approver',
+        ]);
+    }
+
+    /**
      * Determine whether the user may list requests shared with their own
      * account. Approved application roles may use this endpoint.
      */

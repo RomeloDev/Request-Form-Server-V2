@@ -118,7 +118,10 @@ class RequestFormController extends Controller
             /*
             * Include:
             * 1. This approver's completed/disapproved history.
-            * 2. A Pending step only when every earlier level is Approved.
+            * 2. A Pending step only when it is currently actionable.
+            *
+            * The actionablePending scope is shared with the dashboard so
+            * both surfaces use the same "current approver's turn" rules.
             */
             ->where(function ($query): void {
                 $query
@@ -127,44 +130,10 @@ class RequestFormController extends Controller
                         '!=',
                         ApprovalStepStatus::Pending->value,
                     )
-                    ->orWhere(function ($pendingQuery): void {
-                        $pendingQuery
-                            ->where(
-                                'status',
-                                ApprovalStepStatus::Pending->value,
-                            )
-                            ->whereHas(
-                                'requestForm',
-                                fn ($requestQuery) => $requestQuery->whereIn(
-                                    'status',
-                                    [
-                                        RequestStatus::Pending->value,
-                                        RequestStatus::Ongoing->value,
-                                    ],
-                                ),
-                            )
-                            ->whereNotExists(function ($earlierSteps): void {
-                                $earlierSteps
-                                    ->selectRaw('1')
-                                    ->from(
-                                        'request_approval_steps as earlier_steps'
-                                    )
-                                    ->whereColumn(
-                                        'earlier_steps.request_form_id',
-                                        'request_approval_steps.request_form_id',
-                                    )
-                                    ->whereColumn(
-                                        'earlier_steps.level',
-                                        '<',
-                                        'request_approval_steps.level',
-                                    )
-                                    ->where(
-                                        'earlier_steps.status',
-                                        '!=',
-                                        ApprovalStepStatus::Approved->value,
-                                    );
-                            });
-                    });
+                    ->orWhere(
+                        fn ($pendingQuery) => $pendingQuery
+                            ->actionablePending(),
+                    );
             })
 
             ->when(

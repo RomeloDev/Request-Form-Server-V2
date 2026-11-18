@@ -14,6 +14,7 @@ use App\Http\Controllers\API\V1\Auth\ProfileSignatureController;
 use App\Http\Controllers\API\V1\Auth\RegisterController;
 use App\Http\Controllers\API\V1\BankController;
 use App\Http\Controllers\API\V1\BranchController;
+use App\Http\Controllers\API\V1\DashboardController;
 use App\Http\Controllers\API\V1\PositionController;
 use App\Http\Controllers\API\V1\RequestFormController;
 use App\Http\Controllers\API\V1\SupplierController;
@@ -39,6 +40,10 @@ Route::prefix('v1')->middleware('throttle:60,1')->group(function () {
         Route::get('/profile', [ProfileController::class, 'show'])
             ->name('profile.show');
         Route::post('/logout', [LoginController::class, 'logout']);
+
+        // Authenticated, role-gated dashboard.
+        Route::get('/dashboard', [DashboardController::class, 'show'])
+            ->name('dashboard.show');
 
         // Admin-only endpoints
         // User management endpoints (CRUD)

@@ -4,7 +4,9 @@ namespace App\Models;
 
 use App\Enums\ApprovalStepStatus;
 use App\Enums\ApprovalStepType;
+use App\Enums\RequestStatus;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -34,6 +36,52 @@ class RequestApprovalStep extends Model
             'status' => ApprovalStepStatus::class,
             'acted_at' => 'datetime',
         ];
+    }
+
+    /**
+     * Limit the query to Pending steps that are currently actionable.
+     *
+     * A Pending step is actionable only when its request is Pending or
+     * Ongoing and every lower approval level for that request is Approved.
+     * The requestForm relation applies RequestForm's SoftDeletes scope, so
+     * steps on trashed requests are never actionable.
+     *
+     * This scope is shared by the Process Requests listing and the dashboard
+     * so both use one definition of "the current approver's turn".
+     */
+    public function scopeActionablePending(Builder $query): Builder
+    {
+        return $query
+            ->where('status', ApprovalStepStatus::Pending->value)
+            ->whereHas(
+                'requestForm',
+                fn (Builder $requestQuery): Builder => $requestQuery->whereIn(
+                    'status',
+                    [
+                        RequestStatus::Pending->value,
+                        RequestStatus::Ongoing->value,
+                    ],
+                ),
+            )
+            ->whereNotExists(function ($earlierSteps): void {
+                $earlierSteps
+                    ->selectRaw('1')
+                    ->from('request_approval_steps as earlier_steps')
+                    ->whereColumn(
+                        'earlier_steps.request_form_id',
+                        'request_approval_steps.request_form_id',
+                    )
+                    ->whereColumn(
+                        'earlier_steps.level',
+                        '<',
+                        'request_approval_steps.level',
+                    )
+                    ->where(
+                        'earlier_steps.status',
+                        '!=',
+                        ApprovalStepStatus::Approved->value,
+                    );
+            });
     }
 
     /**
