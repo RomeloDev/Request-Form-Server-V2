@@ -180,8 +180,8 @@ class ChangeProfilePasswordTest extends TestCase
         $oldSessionId = session()->getId();
 
         $this->withHeaders([
-            'Origin' => 'http://localhost',
-            'Referer' => 'http://localhost/profile',
+            'Origin' => 'http://localhost:3001',
+            'Referer' => 'http://localhost:3001/profile',
         ])->putJson(self::ENDPOINT, $this->payload())
             ->assertOk();
 
@@ -210,8 +210,8 @@ class ChangeProfilePasswordTest extends TestCase
         session()->regenerateToken();
 
         $this->withHeaders([
-            'Origin' => 'http://localhost',
-            'Referer' => 'http://localhost/login',
+            'Origin' => 'http://localhost:3001',
+            'Referer' => 'http://localhost:3001/login',
         ]);
 
         $this->postJson('/api/v1/login', [
