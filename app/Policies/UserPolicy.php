@@ -76,4 +76,9 @@ class UserPolicy
     {
         return $user->is($profile);
     }
+
+    public function manageSignature(User $user, User $profile): bool
+    {
+        return $user->is($profile);
+    }
 }

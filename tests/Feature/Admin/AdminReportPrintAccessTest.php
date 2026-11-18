@@ -11,6 +11,7 @@ use App\Models\RequestApprovalStep;
 use App\Models\RequestForm;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 use Laravel\Sanctum\Sanctum;
 use Spatie\Permission\Models\Role;
@@ -85,10 +86,7 @@ class AdminReportPrintAccessTest extends TestCase
             signature: 'signatures/requester.png',
         );
         $requestForm = $this->requestForm($requester, $branch);
-        Storage::disk('public')->put(
-            $requester->signature,
-            'requester signature',
-        );
+        $signatureContents = $this->storeLegacySignature($requester);
 
         Sanctum::actingAs($this->user($branch, 'Admin'));
 
@@ -105,7 +103,7 @@ class AdminReportPrintAccessTest extends TestCase
             (string) $response->headers->get('Content-Disposition'),
         );
         $this->assertSame(
-            'requester signature',
+            $signatureContents,
             $response->streamedContent(),
         );
     }
@@ -125,10 +123,7 @@ class AdminReportPrintAccessTest extends TestCase
             $approver,
             ApprovalStepStatus::Approved,
         );
-        Storage::disk('public')->put(
-            $approver->signature,
-            'approved signature',
-        );
+        $signatureContents = $this->storeLegacySignature($approver);
 
         Sanctum::actingAs($this->user($branch, 'Admin'));
 
@@ -141,7 +136,7 @@ class AdminReportPrintAccessTest extends TestCase
             ->assertHeader('Cache-Control', 'no-store, private')
             ->assertHeader('X-Content-Type-Options', 'nosniff');
         $this->assertSame(
-            'approved signature',
+            $signatureContents,
             $response->streamedContent(),
         );
     }
@@ -166,14 +161,8 @@ class AdminReportPrintAccessTest extends TestCase
             $pendingApprover,
             ApprovalStepStatus::Pending,
         );
-        Storage::disk('public')->put(
-            $pendingApprover->signature,
-            'pending signature',
-        );
-        Storage::disk('public')->put(
-            $outsideUser->signature,
-            'outside signature',
-        );
+        $this->storeLegacySignature($pendingApprover);
+        $this->storeLegacySignature($outsideUser);
 
         Sanctum::actingAs($this->user($branch, 'Admin'));
 
@@ -285,6 +274,20 @@ class AdminReportPrintAccessTest extends TestCase
     private function printUrl(RequestForm $requestForm): string
     {
         return "/api/v1/request-forms/{$requestForm->id}/print";
+    }
+
+    private function storeLegacySignature(User $user): string
+    {
+        $file = UploadedFile::fake()->image(
+            basename($user->signature),
+            300,
+            120,
+        );
+        $contents = $file->getContent();
+
+        Storage::disk('public')->put($user->signature, $contents);
+
+        return $contents;
     }
 
     private function signatureUrl(

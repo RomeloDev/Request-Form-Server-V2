@@ -10,6 +10,7 @@ use App\Http\Controllers\API\V1\Admin\UserController;
 use App\Http\Controllers\API\V1\Auth\LoginController;
 use App\Http\Controllers\API\V1\Auth\ProfileController;
 use App\Http\Controllers\API\V1\Auth\ProfilePasswordController;
+use App\Http\Controllers\API\V1\Auth\ProfileSignatureController;
 use App\Http\Controllers\API\V1\Auth\RegisterController;
 use App\Http\Controllers\API\V1\BankController;
 use App\Http\Controllers\API\V1\BranchController;
@@ -35,7 +36,8 @@ Route::prefix('v1')->middleware('throttle:60,1')->group(function () {
 
     // Protected endpoints
     Route::middleware('auth:sanctum')->group(function () {
-        Route::get('/profile', [ProfileController::class, 'show']);
+        Route::get('/profile', [ProfileController::class, 'show'])
+            ->name('profile.show');
         Route::post('/logout', [LoginController::class, 'logout']);
 
         // Admin-only endpoints
@@ -365,18 +367,35 @@ Route::prefix('v1')->middleware('throttle:60,1')->group(function () {
         Route::get(
             '/profile/picture',
             [ProfileController::class, 'showPicture'],
-        );
+        )->name('profile.picture.show');
         Route::post(
             '/profile/picture',
             [ProfileController::class, 'updatePicture'],
-        )->middleware('throttle:10,1');
+        )->middleware('throttle:10,1')
+            ->name('profile.picture.update');
         Route::delete(
             '/profile/picture',
             [ProfileController::class, 'destroyPicture'],
-        )->middleware('throttle:10,1');
+        )->middleware('throttle:10,1')
+            ->name('profile.picture.destroy');
+        Route::get(
+            '/profile/signature',
+            [ProfileSignatureController::class, 'show'],
+        )->name('profile.signature.show');
+        Route::post(
+            '/profile/signature',
+            [ProfileSignatureController::class, 'update'],
+        )->middleware('throttle:10,1')
+            ->name('profile.signature.update');
+        Route::delete(
+            '/profile/signature',
+            [ProfileSignatureController::class, 'destroy'],
+        )->middleware('throttle:10,1')
+            ->name('profile.signature.destroy');
         Route::put(
             '/profile/password',
             [ProfilePasswordController::class, 'update'],
-        )->middleware('throttle:5,1');
+        )->middleware('throttle:5,1')
+            ->name('profile.password.update');
     });
 });

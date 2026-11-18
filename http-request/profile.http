@@ -1,0 +1,322 @@
+@host = http://localhost:8000
+@origin = http://localhost:3001
+
+###############################################################################
+# PROFILE — MANUAL API VERIFICATION
+###############################################################################
+
+# Start Laravel:
+#   php artisan serve --host=127.0.0.1 --port=8000
+#
+# Authentication uses Sanctum's browser-session cookie flow, not bearer tokens.
+# VS Code REST Client keeps that cookie for {{host}} between requests below.
+#
+# CSRF is required for state-changing browser-session requests (POST, PUT,
+# DELETE). Refresh /sanctum/csrf-cookie first, copy the URL-decoded
+# XSRF-TOKEN cookie value, and paste it when the xsrfToken prompt appears.
+# A 419 means the CSRF cookie or token is stale; a 401 means the session
+# cookie is missing or expired.
+#
+# No Profile operation accepts a target user ID. The owner is always the
+# authenticated Sanctum user. Sending user_id, role, a storage path, or a disk
+# must never redirect an operation to another account or storage location.
+#
+# The picture and signature read endpoints stream private bytes with
+# Cache-Control: private, no-store and X-Content-Type-Options: nosniff. They
+# never return a public URL, storage disk, or stored path.
+#
+# Keep real passwords and real local file paths out of this file. Replace the
+# placeholder paths below in your local copy only.
+
+
+###############################################################################
+# UNAUTHENTICATED ACCESS
+###############################################################################
+
+### 1. Guest profile read: expected 401 Unauthorized
+# Run this before signing in, or after logging out below.
+GET {{host}}/api/v1/profile
+Accept: application/json
+Origin: {{origin}}
+
+
+### 2. Guest picture read: expected 401 Unauthorized
+GET {{host}}/api/v1/profile/picture
+Accept: image/*
+Origin: {{origin}}
+
+
+### 3. Guest signature read: expected 401 Unauthorized
+GET {{host}}/api/v1/profile/signature
+Accept: image/png
+Origin: {{origin}}
+
+
+###############################################################################
+# SANCTUM SESSION
+###############################################################################
+
+### 4. Start or refresh the Sanctum CSRF session
+GET {{host}}/sanctum/csrf-cookie
+Accept: application/json
+Origin: {{origin}}
+
+
+### 5. Sign in with a verified account
+# @prompt login Enter your username, email, or employee ID
+# @prompt password Enter your password
+# @prompt xsrfToken Paste the URL-decoded XSRF-TOKEN cookie value
+POST {{host}}/api/v1/login
+Accept: application/json
+Content-Type: application/json
+Origin: {{origin}}
+X-XSRF-TOKEN: {{xsrfToken}}
+
+{
+  "email": "{{login}}",
+  "password": "{{password}}"
+}
+
+
+### 6. Safe self-profile read: expected 200
+# The response contains status and the safe ProfileResource only.
+# It must not contain password, remember_token, roles arrays, profile-picture
+# paths, signature paths, disks, or a raw User model.
+GET {{host}}/api/v1/profile
+Accept: application/json
+Origin: {{origin}}
+
+
+###############################################################################
+# PROFILE PICTURE
+###############################################################################
+
+### 7. Read own profile picture: expected 200, or 404 when none is stored
+# The query fields are deliberately ignored. The response must remain scoped
+# to the authenticated account and must not reveal another user's file.
+GET {{host}}/api/v1/profile/picture?user_id=999999&role=Admin&profile_picture_path=profile-pictures/other.png&disk=public
+Accept: image/*
+Origin: {{origin}}
+
+
+### 8. Upload or replace the profile picture: expected 200
+# Replace the path after '<' with a local JPG, JPEG, or PNG no larger than
+# 2 MB and no larger than 4096 x 4096. The server generates the stored name.
+# @prompt xsrfToken Paste the URL-decoded XSRF-TOKEN cookie value
+POST {{host}}/api/v1/profile/picture
+Accept: application/json
+Content-Type: multipart/form-data; boundary=ProfilePictureBoundary
+Origin: {{origin}}
+X-XSRF-TOKEN: {{xsrfToken}}
+
+--ProfilePictureBoundary
+Content-Disposition: form-data; name="profile_picture"; filename="profile-picture.png"
+Content-Type: image/png
+
+< C:/replace/this/path/profile-picture.png
+--ProfilePictureBoundary--
+
+
+### 9. Read the uploaded picture: expected 200 image/jpeg or image/png
+GET {{host}}/api/v1/profile/picture
+Accept: image/*
+Origin: {{origin}}
+
+
+### 10. Attempt server-owned picture fields: expected 422
+# user_id, role, and profile_picture_path are prohibited. The request must not
+# write another account's picture or an attacker-selected storage path.
+# @prompt xsrfToken Paste the URL-decoded XSRF-TOKEN cookie value
+POST {{host}}/api/v1/profile/picture
+Accept: application/json
+Content-Type: multipart/form-data; boundary=ProfilePictureFieldBoundary
+Origin: {{origin}}
+X-XSRF-TOKEN: {{xsrfToken}}
+
+--ProfilePictureFieldBoundary
+Content-Disposition: form-data; name="profile_picture"; filename="profile-picture.png"
+Content-Type: image/png
+
+< C:/replace/this/path/profile-picture.png
+--ProfilePictureFieldBoundary
+Content-Disposition: form-data; name="user_id"
+
+1
+--ProfilePictureFieldBoundary
+Content-Disposition: form-data; name="role"
+
+Admin
+--ProfilePictureFieldBoundary
+Content-Disposition: form-data; name="profile_picture_path"
+
+profile-pictures/forged.png
+--ProfilePictureFieldBoundary--
+
+
+### 11. Remove the profile picture: expected 200
+# Response: message plus data.has_profile_picture = false.
+# @prompt xsrfToken Paste the URL-decoded XSRF-TOKEN cookie value
+DELETE {{host}}/api/v1/profile/picture
+Accept: application/json
+Origin: {{origin}}
+X-XSRF-TOKEN: {{xsrfToken}}
+
+
+### 12. Read after deletion: expected 404
+# A missing picture must return 404 without exposing a disk or stored path.
+GET {{host}}/api/v1/profile/picture
+Accept: image/*
+Origin: {{origin}}
+
+
+###############################################################################
+# SIGNATURE
+###############################################################################
+
+# Changing or removing a signature affects future printable documents.
+# Existing request-print authorization is unchanged: the same owner, approved
+# approver, shared-recipient, and Admin report rules still decide who may read
+# a printable signature.
+
+### 13. Read own signature: expected 200, or 404 when none is stored
+# The query fields are deliberately ignored. The response must remain scoped
+# to the authenticated account and must never expose a public path or URL.
+GET {{host}}/api/v1/profile/signature?user_id=999999&role=Admin&signature_path=signatures/other.png&disk=public
+Accept: image/png
+Origin: {{origin}}
+
+
+### 14. Upload or replace the signature: expected 200
+# Replace the path after '<' with a local PNG no larger than 3 MB and no
+# larger than 4096 x 2048. PNG is the only accepted format.
+# @prompt xsrfToken Paste the URL-decoded XSRF-TOKEN cookie value
+POST {{host}}/api/v1/profile/signature
+Accept: application/json
+Content-Type: multipart/form-data; boundary=ProfileSignatureBoundary
+Origin: {{origin}}
+X-XSRF-TOKEN: {{xsrfToken}}
+
+--ProfileSignatureBoundary
+Content-Disposition: form-data; name="signature"; filename="signature.png"
+Content-Type: image/png
+
+< C:/replace/this/path/signature.png
+--ProfileSignatureBoundary--
+
+
+### 15. Read the uploaded signature: expected 200 image/png
+GET {{host}}/api/v1/profile/signature
+Accept: image/png
+Origin: {{origin}}
+
+
+### 16. Attempt server-owned signature fields: expected 422
+# user_id, role, signature_path, and disk are prohibited. The request must not
+# target another account or choose a storage location.
+# @prompt xsrfToken Paste the URL-decoded XSRF-TOKEN cookie value
+POST {{host}}/api/v1/profile/signature
+Accept: application/json
+Content-Type: multipart/form-data; boundary=ProfileSignatureFieldBoundary
+Origin: {{origin}}
+X-XSRF-TOKEN: {{xsrfToken}}
+
+--ProfileSignatureFieldBoundary
+Content-Disposition: form-data; name="signature"; filename="signature.png"
+Content-Type: image/png
+
+< C:/replace/this/path/signature.png
+--ProfileSignatureFieldBoundary
+Content-Disposition: form-data; name="user_id"
+
+1
+--ProfileSignatureFieldBoundary
+Content-Disposition: form-data; name="role"
+
+Admin
+--ProfileSignatureFieldBoundary
+Content-Disposition: form-data; name="signature_path"
+
+signatures/forged.png
+--ProfileSignatureFieldBoundary
+Content-Disposition: form-data; name="disk"
+
+public
+--ProfileSignatureFieldBoundary--
+
+
+### 17. Remove the signature: expected 200
+# Response: message plus data.has_signature = false.
+# @prompt xsrfToken Paste the URL-decoded XSRF-TOKEN cookie value
+DELETE {{host}}/api/v1/profile/signature
+Accept: application/json
+Origin: {{origin}}
+X-XSRF-TOKEN: {{xsrfToken}}
+
+
+### 18. Read after deletion: expected 404
+# A missing signature must return 404 without exposing a disk or stored path.
+GET {{host}}/api/v1/profile/signature
+Accept: image/png
+Origin: {{origin}}
+
+
+###############################################################################
+# PASSWORD
+###############################################################################
+
+### 19. Change the password: expected 200
+# This request really changes the signed-in account's password and may
+# regenerate the session. Use disposable local test credentials only.
+# @prompt currentPassword Enter the current password
+# @prompt newPassword Enter a new password of at least 8 characters
+# @prompt confirmPassword Repeat the new password exactly
+# @prompt xsrfToken Paste the URL-decoded XSRF-TOKEN cookie value
+PUT {{host}}/api/v1/profile/password
+Accept: application/json
+Content-Type: application/json
+Origin: {{origin}}
+X-XSRF-TOKEN: {{xsrfToken}}
+
+{
+  "current_password": "{{currentPassword}}",
+  "new_password": "{{newPassword}}",
+  "new_password_confirmation": "{{confirmPassword}}"
+}
+
+
+### 20. Attempt prohibited password aliases: expected 422
+# The legacy password field and server-owned user_id/role are rejected.
+# Send disposable placeholder values only; this request cannot succeed.
+# @prompt xsrfToken Paste the URL-decoded XSRF-TOKEN cookie value
+PUT {{host}}/api/v1/profile/password
+Accept: application/json
+Content-Type: application/json
+Origin: {{origin}}
+X-XSRF-TOKEN: {{xsrfToken}}
+
+{
+  "current_password": "placeholder-current-password",
+  "new_password": "placeholder-new-password",
+  "new_password_confirmation": "placeholder-new-password",
+  "password": "placeholder-new-password",
+  "user_id": 1,
+  "role": "Admin"
+}
+
+
+###############################################################################
+# LOGOUT
+###############################################################################
+
+### 21. Log out: expected 204
+# @prompt xsrfToken Paste the URL-decoded XSRF-TOKEN cookie value
+POST {{host}}/api/v1/logout
+Accept: application/json
+Origin: {{origin}}
+X-XSRF-TOKEN: {{xsrfToken}}
+
+
+### 22. Profile after logout: expected 401 Unauthorized
+GET {{host}}/api/v1/profile
+Accept: application/json
+Origin: {{origin}}

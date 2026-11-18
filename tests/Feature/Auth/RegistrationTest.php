@@ -36,7 +36,7 @@ class RegistrationTest extends TestCase
 
     public function test_registration_stores_the_real_branch_code_and_returns_no_token(): void
     {
-        Storage::fake('public');
+        Storage::fake('local');
 
         $branch = $this->branch();
         $position = Position::query()->create([
@@ -69,12 +69,12 @@ class RegistrationTest extends TestCase
         $this->assertSame($branch->branch, $user->branch);
         $this->assertTrue($user->hasRole('User'));
         $this->assertDatabaseCount('personal_access_tokens', 0);
-        Storage::disk('public')->assertExists($user->signature);
+        Storage::disk('local')->assertExists($user->signature);
     }
 
     public function test_registration_rejects_a_branch_id_and_client_supplied_company(): void
     {
-        Storage::fake('public');
+        Storage::fake('local');
 
         $branch = $this->branch();
         $position = Position::query()->create([
@@ -102,7 +102,7 @@ class RegistrationTest extends TestCase
         $this->assertDatabaseCount('users', 0);
         $this->assertSame(
             [],
-            Storage::disk('public')->allFiles(),
+            Storage::disk('local')->allFiles(),
         );
     }
 

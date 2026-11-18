@@ -11,6 +11,7 @@ use App\Models\RequestApprovalStep;
 use App\Models\RequestForm;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 use Laravel\Sanctum\Sanctum;
 use Spatie\Permission\Models\Role;
@@ -49,10 +50,7 @@ class ViewPrintableRequestSignatureTest extends TestCase
         $requester = $this->user($branch, signature: 'signatures/requester.png');
         $requestForm = $this->requestForm($requester, $branch);
 
-        Storage::disk('public')->put(
-            $requester->signature,
-            'requester signature contents',
-        );
+        $signatureContents = $this->storeLegacySignature($requester);
 
         Sanctum::actingAs($requester);
 
@@ -76,7 +74,7 @@ class ViewPrintableRequestSignatureTest extends TestCase
             (string) $response->headers->get('Content-Disposition'),
         );
         $this->assertSame(
-            'requester signature contents',
+            $signatureContents,
             $response->streamedContent(),
         );
     }
@@ -98,10 +96,7 @@ class ViewPrintableRequestSignatureTest extends TestCase
             $approver,
             ApprovalStepStatus::Approved,
         );
-        Storage::disk('public')->put(
-            $approver->signature,
-            'approved signature contents',
-        );
+        $signatureContents = $this->storeLegacySignature($approver);
 
         Sanctum::actingAs($requester);
 
@@ -114,7 +109,7 @@ class ViewPrintableRequestSignatureTest extends TestCase
             ->assertHeader('Content-Type', 'image/png');
 
         $this->assertSame(
-            'approved signature contents',
+            $signatureContents,
             $response->streamedContent(),
         );
     }
@@ -134,10 +129,7 @@ class ViewPrintableRequestSignatureTest extends TestCase
             $approver,
             ApprovalStepStatus::Pending,
         );
-        Storage::disk('public')->put(
-            $requester->signature,
-            'requester visible to assigned approver',
-        );
+        $this->storeLegacySignature($requester);
 
         Sanctum::actingAs($approver);
 
@@ -183,10 +175,7 @@ class ViewPrintableRequestSignatureTest extends TestCase
         );
         $requestForm = $this->requestForm($requester, $branch);
 
-        Storage::disk('public')->put(
-            $outsideUser->signature,
-            'must remain private',
-        );
+        $this->storeLegacySignature($outsideUser);
 
         Sanctum::actingAs($requester);
 
@@ -213,10 +202,7 @@ class ViewPrintableRequestSignatureTest extends TestCase
             $approver,
             ApprovalStepStatus::Pending,
         );
-        Storage::disk('public')->put(
-            $approver->signature,
-            'pending signature must not be printed',
-        );
+        $this->storeLegacySignature($approver);
 
         Sanctum::actingAs($requester);
 
@@ -306,6 +292,20 @@ class ViewPrintableRequestSignatureTest extends TestCase
         User $signatureOwner,
     ): string {
         return "/api/v1/request-forms/{$requestForm->id}/print/signatures/{$signatureOwner->id}";
+    }
+
+    private function storeLegacySignature(User $user): string
+    {
+        $file = UploadedFile::fake()->image(
+            basename($user->signature),
+            300,
+            120,
+        );
+        $contents = $file->getContent();
+
+        Storage::disk('public')->put($user->signature, $contents);
+
+        return $contents;
     }
 
     private function approvalStep(

@@ -14,6 +14,7 @@ use App\Models\RequestForm;
 use App\Models\RequestItem;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 use Laravel\Sanctum\Sanctum;
 use Spatie\Permission\Models\Role;
@@ -274,7 +275,9 @@ class AdminReportsWorkflowTest extends TestCase
         );
         Storage::disk('public')->put(
             $owner->signature,
-            'owner signature',
+            UploadedFile::fake()
+                ->image('workflow-owner.png', 300, 120)
+                ->getContent(),
         );
 
         return [

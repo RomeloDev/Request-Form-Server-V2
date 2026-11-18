@@ -11,6 +11,7 @@ use App\Models\RequestApprovalStep;
 use App\Models\RequestForm;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 use Laravel\Sanctum\Sanctum;
 use Spatie\Permission\Models\Role;
@@ -84,10 +85,7 @@ class SharedRequestPrintableAccessTest extends TestCase
         $recipient = $this->user($branch, firstName: 'SignatureRecipient');
         $requestForm = $this->requestForm($requester, $branch);
 
-        Storage::disk('public')->put(
-            $requester->signature,
-            'shared recipient can see requester signature',
-        );
+        $signatureContents = $this->storeLegacySignature($requester);
         $requestForm->sharedRecipients()->attach($recipient->id);
 
         Sanctum::actingAs($recipient);
@@ -112,7 +110,7 @@ class SharedRequestPrintableAccessTest extends TestCase
             (string) $response->headers->get('Content-Disposition'),
         );
         $this->assertSame(
-            'shared recipient can see requester signature',
+            $signatureContents,
             $response->streamedContent(),
         );
         $this->assertStringNotContainsString(
@@ -142,10 +140,7 @@ class SharedRequestPrintableAccessTest extends TestCase
             approver: $approver,
             status: ApprovalStepStatus::Approved,
         );
-        Storage::disk('public')->put(
-            $approver->signature,
-            'approved approver signature contents',
-        );
+        $signatureContents = $this->storeLegacySignature($approver);
         $requestForm->sharedRecipients()->attach($recipient->id);
 
         Sanctum::actingAs($recipient);
@@ -160,7 +155,7 @@ class SharedRequestPrintableAccessTest extends TestCase
             ->assertHeader('X-Content-Type-Options', 'nosniff');
 
         $this->assertSame(
-            'approved approver signature contents',
+            $signatureContents,
             $response->streamedContent(),
         );
     }
@@ -183,10 +178,7 @@ class SharedRequestPrintableAccessTest extends TestCase
             approver: $approver,
             status: ApprovalStepStatus::Pending,
         );
-        Storage::disk('public')->put(
-            $approver->signature,
-            'pending signature must remain private',
-        );
+        $this->storeLegacySignature($approver);
         $requestForm->sharedRecipients()->attach($recipient->id);
 
         Sanctum::actingAs($recipient);
@@ -211,10 +203,7 @@ class SharedRequestPrintableAccessTest extends TestCase
         );
         $requestForm = $this->requestForm($requester, $branch);
 
-        Storage::disk('public')->put(
-            $outsideUser->signature,
-            'outside signature must remain private',
-        );
+        $this->storeLegacySignature($outsideUser);
         $requestForm->sharedRecipients()->attach($recipient->id);
 
         Sanctum::actingAs($recipient);
@@ -233,10 +222,7 @@ class SharedRequestPrintableAccessTest extends TestCase
         $unsharedUser = $this->user($branch, firstName: 'UnsharedUser');
         $requestForm = $this->requestForm($requester, $branch);
 
-        Storage::disk('public')->put(
-            $requester->signature,
-            'requester signature',
-        );
+        $this->storeLegacySignature($requester);
 
         Sanctum::actingAs($unsharedUser);
 
@@ -258,10 +244,7 @@ class SharedRequestPrintableAccessTest extends TestCase
         );
         $requestForm = $this->requestForm($requester, $branch);
 
-        Storage::disk('public')->put(
-            $requester->signature,
-            'requester signature',
-        );
+        $this->storeLegacySignature($requester);
         $requestForm->sharedRecipients()->attach($rolelessRecipient->id);
 
         Sanctum::actingAs($rolelessRecipient);
@@ -284,10 +267,7 @@ class SharedRequestPrintableAccessTest extends TestCase
         $recipient = $this->user($branch, firstName: 'RevokedRecipient');
         $requestForm = $this->requestForm($requester, $branch);
 
-        Storage::disk('public')->put(
-            $requester->signature,
-            'requester signature before revocation',
-        );
+        $this->storeLegacySignature($requester);
         $requestForm->sharedRecipients()->attach($recipient->id);
 
         Sanctum::actingAs($recipient);
@@ -327,10 +307,7 @@ class SharedRequestPrintableAccessTest extends TestCase
             requestCode: 'OTHER-SHARE-PRIVATE',
         );
 
-        Storage::disk('public')->put(
-            $requester->signature,
-            'requester signature',
-        );
+        $this->storeLegacySignature($requester);
         $sharedRequest->sharedRecipients()->attach($recipient->id);
 
         Sanctum::actingAs($recipient);
@@ -355,10 +332,7 @@ class SharedRequestPrintableAccessTest extends TestCase
             RequestStatus::Canceled,
         );
 
-        Storage::disk('public')->put(
-            $requester->signature,
-            'requester signature',
-        );
+        $this->storeLegacySignature($requester);
         $requestForm->sharedRecipients()->attach($recipient->id);
 
         Sanctum::actingAs($recipient);
@@ -394,10 +368,7 @@ class SharedRequestPrintableAccessTest extends TestCase
         );
         $requestForm = $this->requestForm($requester, $branch);
 
-        Storage::disk('public')->put(
-            $requester->signature,
-            'existing requester signature',
-        );
+        $this->storeLegacySignature($requester);
         $this->approvalStep(
             requestForm: $requestForm,
             approver: $approver,
@@ -458,6 +429,20 @@ class SharedRequestPrintableAccessTest extends TestCase
         User $signatureOwner,
     ): string {
         return "/api/v1/request-forms/{$requestForm->id}/print/signatures/{$signatureOwner->id}";
+    }
+
+    private function storeLegacySignature(User $user): string
+    {
+        $file = UploadedFile::fake()->image(
+            basename($user->signature),
+            300,
+            120,
+        );
+        $contents = $file->getContent();
+
+        Storage::disk('public')->put($user->signature, $contents);
+
+        return $contents;
     }
 
     private function approvalStep(

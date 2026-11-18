@@ -23,8 +23,8 @@ class RegisterController extends Controller
             ->where('branch_code', $data['branch_code'])
             ->firstOrFail();
 
-        // A. Store the uploaded signature.
-        $path = $request->file('signature')->store('signatures', 'public');
+        // A. Store the uploaded signature on the private local disk.
+        $path = $request->file('signature')->store('signatures', 'local');
 
         if ($path === false) {
             throw new RuntimeException('Unable to store the signature.');
@@ -62,7 +62,7 @@ class RegisterController extends Controller
             // Keep the original error even if cleanup also fails.
 
             try {
-                $deleted = Storage::disk('public')->delete($path);
+                $deleted = Storage::disk('local')->delete($path);
 
                 if (! $deleted) {
                     report(new RuntimeException(

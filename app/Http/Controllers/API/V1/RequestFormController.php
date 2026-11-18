@@ -45,6 +45,7 @@ use App\Models\RequestForm;
 use App\Models\User;
 use App\Services\CashDisbursementService;
 use App\Services\CheckIssuanceService;
+use App\Services\ProfileSignatureService;
 use App\Services\PurchaseOrderService;
 use App\Services\RequestApproverCandidateService;
 use App\Services\RequestCancellationService;
@@ -753,6 +754,7 @@ class RequestFormController extends Controller
         ViewPrintableRequestSignatureRequest $request,
         RequestForm $requestForm,
         User $signatureOwner,
+        ProfileSignatureService $signatureService,
     ): StreamedResponse|JsonResponse {
         if ($requestForm->status === RequestStatus::Canceled) {
             return response()->json([
@@ -777,22 +779,26 @@ class RequestFormController extends Controller
             );
         }
 
-        $signaturePath = $signatureOwner->signature;
-        $disk = Storage::disk('public');
+        $signaturePath = is_string($signatureOwner->signature)
+            ? $signatureOwner->signature
+            : null;
 
-        if (
-            ! is_string($signaturePath)
-            || $signaturePath === ''
-            || ! $disk->exists($signaturePath)
-        ) {
+        /*
+         * Prefer the private local disk, with a controlled public-disk
+         * fallback for signatures stored before this change. The caller still
+         * streams the bytes; no public URL is ever returned to the browser.
+         */
+        $located = $signatureService->locate($signaturePath);
+
+        if ($located === null) {
             abort(
                 Response::HTTP_NOT_FOUND,
                 'Signature not available.',
             );
         }
 
-        return $disk->response(
-            $signaturePath,
+        return Storage::disk($located['disk'])->response(
+            $located['path'],
             "signature-{$signatureOwner->id}.png",
             [
                 'Content-Type' => 'image/png',
