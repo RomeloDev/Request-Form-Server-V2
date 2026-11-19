@@ -179,9 +179,14 @@ class ChangeProfilePasswordTest extends TestCase
         ]);
         $oldSessionId = session()->getId();
 
+        /*
+         * Sanctum only attaches the session middleware for stateful
+         * domains. localhost:3000 is in the configured stateful list, so the
+         * password change can regenerate the session exactly like the SPA.
+         */
         $this->withHeaders([
-            'Origin' => 'http://localhost:3001',
-            'Referer' => 'http://localhost:3001/profile',
+            'Origin' => 'http://localhost:3000',
+            'Referer' => 'http://localhost:3000/profile',
         ])->putJson(self::ENDPOINT, $this->payload())
             ->assertOk();
 
@@ -209,9 +214,15 @@ class ChangeProfilePasswordTest extends TestCase
         session()->invalidate();
         session()->regenerateToken();
 
+        /*
+         * LoginController regenerates a session, which only exists when the
+         * request comes from a Sanctum stateful domain. Use localhost:3000,
+         * matching the configured SPA origin, instead of the non-stateful
+         * localhost:3001 origin that produced "Session store not set".
+         */
         $this->withHeaders([
-            'Origin' => 'http://localhost:3001',
-            'Referer' => 'http://localhost:3001/login',
+            'Origin' => 'http://localhost:3000',
+            'Referer' => 'http://localhost:3000/login',
         ]);
 
         $this->postJson('/api/v1/login', [
@@ -240,7 +251,7 @@ class ChangeProfilePasswordTest extends TestCase
             $route->getActionName(),
         );
         $this->assertContains('auth:sanctum', $route->gatherMiddleware());
-        $this->assertContains('throttle:5,1', $route->gatherMiddleware());
+        $this->assertContains('throttle:20,1', $route->gatherMiddleware());
     }
 
     /** @return array<string, string> */

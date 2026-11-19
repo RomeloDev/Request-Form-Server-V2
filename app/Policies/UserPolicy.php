@@ -28,11 +28,48 @@ class UserPolicy
     }
 
     /**
-     * Determine whether the user can create models.
+     * Determine whether the user can create a user account.
      */
     public function create(User $user): bool
     {
-        return false;
+        return $user->hasRole('Admin');
+    }
+
+    /**
+     * Determine whether the user can bulk-create or import user accounts.
+     */
+    public function bulkCreate(User $user): bool
+    {
+        return $user->hasRole('Admin');
+    }
+
+    /**
+     * Determine whether the user can verify another user's email address.
+     *
+     * Verification is an administrative action, so only the Admin role
+     * may perform it.
+     */
+    public function verify(User $user, User $model): bool
+    {
+        return $user->hasRole('Admin');
+    }
+
+    /**
+     * Determine whether the user can view another user's protected
+     * profile picture.
+     */
+    public function viewProfilePicture(User $user, User $model): bool
+    {
+        return $user->hasRole('Admin');
+    }
+
+    /**
+     * Determine whether the user can view another user's protected
+     * signature.
+     */
+    public function viewSignature(User $user, User $model): bool
+    {
+        return $user->hasRole('Admin');
     }
 
     /**

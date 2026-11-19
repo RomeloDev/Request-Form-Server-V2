@@ -310,8 +310,8 @@ class ProfileSignatureTest extends TestCase
     {
         foreach ([
             'profile.signature.show' => null,
-            'profile.signature.update' => 'throttle:10,1',
-            'profile.signature.destroy' => 'throttle:10,1',
+            'profile.signature.update' => 'throttle:20,1',
+            'profile.signature.destroy' => 'throttle:20,1',
         ] as $name => $throttle) {
             $route = Route::getRoutes()->getByName($name);
 

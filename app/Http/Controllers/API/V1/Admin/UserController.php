@@ -3,12 +3,19 @@
 namespace App\Http\Controllers\API\V1\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Admin\BulkStoreUsersRequest;
+use App\Http\Requests\Admin\StoreUserRequest;
 use App\Http\Requests\Admin\UpdateUserRequest;
+use App\Http\Resources\AdminUserResource;
 use App\Models\Branch;
 use App\Models\User;
+use App\Services\AdminUserCreationService;
+use App\Services\ProfilePictureService;
+use App\Services\ProfileSignatureService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Storage;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class UserController extends Controller
 {
@@ -18,9 +25,9 @@ class UserController extends Controller
 
         $users = User::query()->withoutRole('Admin')->with('roles:id,name')->get([
             'id',
-            'firstName as firstname',
-            'lastName as lastname',
-            'userName as username',
+            'firstName',
+            'lastName',
+            'userName',
             'email',
             'employee_id',
             'position',
@@ -32,48 +39,128 @@ class UserController extends Controller
             'email_verified_at',
         ]);
 
-        foreach ($users as $user) {
-            // Preserve the current frontend role string using Spatie.
-            $user->setAttribute(
-                'role',
-                $user->getRoleNames()->first()
-            );
-
-            // Avoid exposing Spatie's internal relationship structure.
-            $user->unsetRelation('roles');
-
-            $user->verification_status = $user->email_verified_at
-                ? 'Verified'
-                : 'Not Verified';
-        }
-
         return response()->json([
             'message' => 'Users retrieved successfully',
-            'data' => $users,
+            'data' => AdminUserResource::collection($users)->resolve(),
         ]);
     }
 
-    public function verify(string $id): JsonResponse
-    {
-        $user = User::find($id);
+    public function store(
+        StoreUserRequest $request,
+        AdminUserCreationService $service,
+    ): JsonResponse {
+        $user = $service->create($request->validated());
 
-        if ($user == null) {
+        return response()->json([
+            'message' => 'User created successfully.',
+            'data' => (new AdminUserResource($user))->resolve(),
+        ], 201);
+    }
+
+    public function storeBulk(
+        BulkStoreUsersRequest $request,
+        AdminUserCreationService $service,
+    ): JsonResponse {
+        $users = $service->createMany($request->validated('users'));
+
+        return response()->json([
+            'message' => 'Users created successfully.',
+            'created_count' => count($users),
+        ], 201);
+    }
+
+    /**
+     * Stream a protected profile picture to an authorized Admin.
+     *
+     * The response is built from the located disk and path only. Neither the
+     * disk name, the storage path, nor a public URL is exposed to the client.
+     */
+    public function profilePicture(
+        User $user,
+        ProfilePictureService $service,
+    ): StreamedResponse {
+        Gate::authorize('viewProfilePicture', $user);
+
+        $located = $service->locate(
+            is_string($user->profile_picture) ? $user->profile_picture : null,
+        );
+
+        if ($located === null) {
+            abort(404, 'Profile picture not found.');
+        }
+
+        return Storage::disk($located['disk'])->response(
+            $located['path'],
+            "user-{$user->id}-profile-picture.{$located['extension']}",
+            [
+                'Content-Type' => $located['mime_type'],
+                'Cache-Control' => 'private, no-store',
+                'X-Content-Type-Options' => 'nosniff',
+            ],
+            'inline',
+        );
+    }
+
+    /**
+     * Stream a protected signature to an authorized Admin.
+     *
+     * ProfileSignatureService::locate() already restricts reads to a real PNG
+     * inside the signatures directory, with the legacy public fallback.
+     */
+    public function signature(
+        User $user,
+        ProfileSignatureService $service,
+    ): StreamedResponse {
+        Gate::authorize('viewSignature', $user);
+
+        $located = $service->locate(
+            is_string($user->signature) ? $user->signature : null,
+        );
+
+        if ($located === null) {
+            abort(404, 'Signature not found.');
+        }
+
+        return Storage::disk($located['disk'])->response(
+            $located['path'],
+            "user-{$user->id}-signature.png",
+            [
+                'Content-Type' => 'image/png',
+                'Cache-Control' => 'private, no-store',
+                'X-Content-Type-Options' => 'nosniff',
+            ],
+            'inline',
+        );
+    }
+
+    public function verify(string $user): JsonResponse
+    {
+        // Reject non-Admin callers before looking up the supplied identifier,
+        // so this endpoint cannot be used to probe whether an account exists.
+        Gate::authorize('viewAny', User::class);
+
+        $target = User::find($user);
+
+        if ($target == null) {
             return response()->json([
                 'message' => 'User not found or already deleted.',
             ], 404);
         }
 
-        if ($user->email_verified_at !== null) {
+        // Authorize before revealing or changing verification state.
+        Gate::authorize('verify', $target);
+
+        if ($target->email_verified_at !== null) {
             return response()->json([
                 'message' => 'User is already verified.',
             ], 409);
         }
 
-        $user->email_verified_at = now();
-        $user->save();
+        $target->email_verified_at = now();
+        $target->save();
 
         return response()->json([
-            'message' => 'User '.$user->firstName.' verified successfully.',
+            'message' => 'User '.$target->firstName.' verified successfully.',
         ], 200);
     }
 

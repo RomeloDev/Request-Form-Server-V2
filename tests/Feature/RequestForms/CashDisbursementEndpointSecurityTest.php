@@ -16,10 +16,12 @@ use Illuminate\Support\Facades\Storage;
 use Laravel\Sanctum\Sanctum;
 use Spatie\Permission\Models\Role;
 use Spatie\Permission\PermissionRegistrar;
+use Tests\Support\ProvidesUsableSignatures;
 use Tests\TestCase;
 
 class CashDisbursementEndpointSecurityTest extends TestCase
 {
+    use ProvidesUsableSignatures;
     use RefreshDatabase;
 
     private int $sequence = 0;
@@ -27,6 +29,8 @@ class CashDisbursementEndpointSecurityTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+
+        Storage::fake('public');
 
         app(PermissionRegistrar::class)
             ->forgetCachedPermissions();
@@ -404,6 +408,8 @@ class CashDisbursementEndpointSecurityTest extends TestCase
         if ($role !== null) {
             $user->assignRole($role);
         }
+
+        $this->giveUsableSignature($user);
 
         return $user;
     }

@@ -18,10 +18,12 @@ use Laravel\Sanctum\Sanctum;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Spatie\Permission\Models\Role;
 use Spatie\Permission\PermissionRegistrar;
+use Tests\Support\ProvidesUsableSignatures;
 use Tests\TestCase;
 
 class UpdateCashDisbursementTest extends TestCase
 {
+    use ProvidesUsableSignatures;
     use RefreshDatabase;
 
     private int $sequence = 0;
@@ -29,6 +31,8 @@ class UpdateCashDisbursementTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+
+        Storage::fake('public');
 
         app(PermissionRegistrar::class)
             ->forgetCachedPermissions();
@@ -741,6 +745,8 @@ class UpdateCashDisbursementTest extends TestCase
         if ($role !== null) {
             $user->assignRole($role);
         }
+
+        $this->giveUsableSignature($user);
 
         return $user;
     }

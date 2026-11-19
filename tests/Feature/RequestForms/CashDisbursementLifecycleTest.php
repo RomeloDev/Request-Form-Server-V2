@@ -17,10 +17,12 @@ use Illuminate\Support\Facades\Storage;
 use Laravel\Sanctum\Sanctum;
 use Spatie\Permission\Models\Role;
 use Spatie\Permission\PermissionRegistrar;
+use Tests\Support\ProvidesUsableSignatures;
 use Tests\TestCase;
 
 class CashDisbursementLifecycleTest extends TestCase
 {
+    use ProvidesUsableSignatures;
     use RefreshDatabase;
 
     private const STORE_ROUTE = '/api/v1/request-forms/cash-disbursements';
@@ -30,6 +32,8 @@ class CashDisbursementLifecycleTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+
+        Storage::fake('public');
 
         app(PermissionRegistrar::class)
             ->forgetCachedPermissions();
@@ -422,6 +426,8 @@ class CashDisbursementLifecycleTest extends TestCase
         if ($role !== null) {
             $user->assignRole($role);
         }
+
+        $this->giveUsableSignature($user);
 
         return $user;
     }

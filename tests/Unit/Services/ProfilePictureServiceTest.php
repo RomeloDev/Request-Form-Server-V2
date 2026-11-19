@@ -75,6 +75,43 @@ class ProfilePictureServiceTest extends TestCase
         $this->assertNull($user->fresh()->profile_picture);
     }
 
+    public function test_replace_removes_a_legacy_public_picture_after_the_database_update(): void
+    {
+        Storage::fake('local');
+        Storage::fake('public');
+        $oldPath = 'request_form_profile_pictures/legacy.jpg';
+        Storage::disk('public')->put($oldPath, 'legacy picture');
+        $user = $this->createUser([
+            'profile_picture' => $oldPath,
+        ]);
+
+        app(ProfilePictureService::class)->replace(
+            $user,
+            UploadedFile::fake()->image('new.jpg'),
+        );
+
+        $user->refresh();
+
+        Storage::disk('public')->assertMissing($oldPath);
+        Storage::disk('local')->assertExists($user->profile_picture);
+    }
+
+    public function test_remove_deletes_a_legacy_public_picture(): void
+    {
+        Storage::fake('local');
+        Storage::fake('public');
+        $oldPath = 'request_form_profile_pictures/legacy.jpg';
+        Storage::disk('public')->put($oldPath, 'legacy picture');
+        $user = $this->createUser([
+            'profile_picture' => $oldPath,
+        ]);
+
+        app(ProfilePictureService::class)->remove($user);
+
+        $this->assertNull($user->fresh()->profile_picture);
+        Storage::disk('public')->assertMissing($oldPath);
+    }
+
     /** @param array<string, mixed> $attributes */
     private function createUser(array $attributes = []): User
     {

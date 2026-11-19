@@ -17,10 +17,12 @@ use Illuminate\Support\Facades\Storage;
 use Laravel\Sanctum\Sanctum;
 use Spatie\Permission\Models\Role;
 use Spatie\Permission\PermissionRegistrar;
+use Tests\Support\ProvidesUsableSignatures;
 use Tests\TestCase;
 
 class CheckIssuanceLifecycleTest extends TestCase
 {
+    use ProvidesUsableSignatures;
     use RefreshDatabase;
 
     private const STORE_ROUTE = '/api/v1/request-forms/check-issuances';
@@ -30,6 +32,8 @@ class CheckIssuanceLifecycleTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+
+        Storage::fake('public');
 
         app(PermissionRegistrar::class)->forgetCachedPermissions();
 
@@ -325,6 +329,8 @@ class CheckIssuanceLifecycleTest extends TestCase
         if ($role !== null) {
             $user->assignRole($role);
         }
+
+        $this->giveUsableSignature($user);
 
         return $user;
     }

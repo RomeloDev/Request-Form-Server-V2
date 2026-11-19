@@ -46,9 +46,26 @@ Route::prefix('v1')->middleware('throttle:60,1')->group(function () {
             ->name('dashboard.show');
 
         // Admin-only endpoints
-        // User management endpoints (CRUD)
+        // Admin user management endpoints, including protected media reads.
+        // Only implemented actions are registered here.
+        Route::prefix('admin/users')->name('admin.users.')->group(function () {
+            Route::get('/', [UserController::class, 'index'])->name('index');
+            Route::post('/', [UserController::class, 'store'])
+                ->middleware('throttle:20,1')
+                ->name('store');
+            Route::post('/bulk', [UserController::class, 'storeBulk'])
+                ->middleware('throttle:10,1')
+                ->name('bulk-store');
+            Route::get('/{user}/profile-picture', [UserController::class, 'profilePicture'])
+                ->name('profile-picture.show');
+            Route::get('/{user}/signature', [UserController::class, 'signature'])
+                ->name('signature.show');
+            Route::post('/{user}/verify', [UserController::class, 'verify'])->name('verify');
+        });
+
+        // Legacy user management endpoints kept for frontend compatibility.
         Route::get('/view-users', [UserController::class, 'index']);
-        Route::post('/verified-user/{id}', [UserController::class, 'verify']);
+        Route::post('/verified-user/{user}', [UserController::class, 'verify']);
         Route::delete('/delete-user/{id}', [UserController::class, 'destroy']);
         Route::post('/update-profile/{user}', [UserController::class, 'update'])
             ->missing(fn () => response()->json(['message' => 'User not found.'], 404));
@@ -185,15 +202,18 @@ Route::prefix('v1')->middleware('throttle:60,1')->group(function () {
         Route::post(
             '/request-forms/stock-requisitions',
             [RequestFormController::class, 'storeStockRequisition']
-        )->middleware('throttle:20,1')->name('request-forms.stock-requisitions.store');
+        )->middleware(['throttle:20,1', 'signature.required'])
+            ->name('request-forms.stock-requisitions.store');
         Route::post(
             '/request-forms/purchase-orders',
             [RequestFormController::class, 'storePurchaseOrder']
-        )->middleware('throttle:20,1')->name('request-forms.purchase-orders.store');
+        )->middleware(['throttle:20,1', 'signature.required'])
+            ->name('request-forms.purchase-orders.store');
         Route::post(
             '/request-forms/cash-disbursements',
             [RequestFormController::class, 'storeCashDisbursement']
-        )->middleware('throttle:20,1')->name('request-forms.cash-disbursements.store');
+        )->middleware(['throttle:20,1', 'signature.required'])
+            ->name('request-forms.cash-disbursements.store');
         Route::get('/request-forms', [RequestFormController::class, 'index'])->name('request-forms.index');
         Route::get('/request-forms/{requestForm}', [RequestFormController::class, 'show'])->missing(
             fn () => response()->json([
@@ -249,7 +269,7 @@ Route::prefix('v1')->middleware('throttle:60,1')->group(function () {
         Route::patch(
             '/request-forms/{requestForm}/stock-requisition',
             [RequestFormController::class, 'updateStockRequisition'],
-        )->middleware('throttle:20,1')
+        )->middleware(['throttle:20,1', 'signature.required'])
             ->missing(
                 fn () => response()->json([
                     'message' => 'Request not found.',
@@ -258,7 +278,7 @@ Route::prefix('v1')->middleware('throttle:60,1')->group(function () {
         Route::patch(
             '/request-forms/{requestForm}/purchase-order',
             [RequestFormController::class, 'updatePurchaseOrder'],
-        )
+        )->middleware('signature.required')
             ->missing(
                 fn () => response()->json([
                     'message' => 'Request not found.',
@@ -267,7 +287,7 @@ Route::prefix('v1')->middleware('throttle:60,1')->group(function () {
         Route::patch(
             '/request-forms/{requestForm}/cash-disbursement',
             [RequestFormController::class, 'updateCashDisbursement'],
-        )->middleware('throttle:20,1')
+        )->middleware(['throttle:20,1', 'signature.required'])
             ->missing(
                 fn () => response()->json([
                     'message' => 'Request not found.',
@@ -276,7 +296,7 @@ Route::prefix('v1')->middleware('throttle:60,1')->group(function () {
         Route::patch(
             '/request-forms/{requestForm}/check-issuance',
             [RequestFormController::class, 'updateCheckIssuance'],
-        )->middleware('throttle:20,1')
+        )->middleware(['throttle:20,1', 'signature.required'])
             ->missing(
                 fn () => response()->json([
                     'message' => 'Request not found.',
@@ -309,11 +329,12 @@ Route::prefix('v1')->middleware('throttle:60,1')->group(function () {
         Route::patch(
             '/approver/request-forms/{requestForm}/decision',
             [RequestFormController::class, 'decideAssignedRequest'],
-        )->missing(
-            fn () => response()->json([
-                'message' => 'Assigned request not found.',
-            ], 404),
-        )
+        )->middleware('signature.required')
+            ->missing(
+                fn () => response()->json([
+                    'message' => 'Assigned request not found.',
+                ], 404),
+            )
             ->name('approver.request-forms.decision');
 
         /*
@@ -348,7 +369,7 @@ Route::prefix('v1')->middleware('throttle:60,1')->group(function () {
         Route::post(
             '/request-forms/check-issuances',
             [RequestFormController::class, 'storeCheckIssuance'],
-        )->middleware('throttle:20,1')
+        )->middleware(['throttle:20,1', 'signature.required'])
             ->name('request-forms.check-issuances.store');
 
         // Admin Reports endpoint
