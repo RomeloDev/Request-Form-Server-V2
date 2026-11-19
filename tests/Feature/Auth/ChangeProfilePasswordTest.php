@@ -21,11 +21,20 @@ class ChangeProfilePasswordTest extends TestCase
 
     private const ENDPOINT = '/api/v1/profile/password';
 
+    private const SPA_HOST = 'localhost:3000';
+
+    private const SPA_ORIGIN = 'http://localhost:3000';
+
     private int $sequence = 0;
 
     protected function setUp(): void
     {
         parent::setUp();
+
+        config()->set('sanctum.stateful', array_values(array_unique([
+            ...config('sanctum.stateful', []),
+            self::SPA_HOST,
+        ])));
 
         app(PermissionRegistrar::class)->forgetCachedPermissions();
 
@@ -181,12 +190,12 @@ class ChangeProfilePasswordTest extends TestCase
 
         /*
          * Sanctum only attaches the session middleware for stateful
-         * domains. localhost:3000 is in the configured stateful list, so the
-         * password change can regenerate the session exactly like the SPA.
+         * domains. The test registers its simulated SPA host in setUp so the
+         * result does not depend on a developer's local environment file.
          */
         $this->withHeaders([
-            'Origin' => 'http://localhost:3000',
-            'Referer' => 'http://localhost:3000/profile',
+            'Origin' => self::SPA_ORIGIN,
+            'Referer' => self::SPA_ORIGIN.'/profile',
         ])->putJson(self::ENDPOINT, $this->payload())
             ->assertOk();
 
@@ -216,13 +225,12 @@ class ChangeProfilePasswordTest extends TestCase
 
         /*
          * LoginController regenerates a session, which only exists when the
-         * request comes from a Sanctum stateful domain. Use localhost:3000,
-         * matching the configured SPA origin, instead of the non-stateful
-         * localhost:3001 origin that produced "Session store not set".
+         * request comes from a Sanctum stateful domain. setUp explicitly
+         * registers this simulated SPA host for every test environment.
          */
         $this->withHeaders([
-            'Origin' => 'http://localhost:3000',
-            'Referer' => 'http://localhost:3000/login',
+            'Origin' => self::SPA_ORIGIN,
+            'Referer' => self::SPA_ORIGIN.'/login',
         ]);
 
         $this->postJson('/api/v1/login', [
