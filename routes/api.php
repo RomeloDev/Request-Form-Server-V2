@@ -15,15 +15,15 @@ use App\Http\Controllers\API\V1\Auth\RegisterController;
 use App\Http\Controllers\API\V1\BankController;
 use App\Http\Controllers\API\V1\BranchController;
 use App\Http\Controllers\API\V1\DashboardController;
+use App\Http\Controllers\API\V1\FeedbackController;
 use App\Http\Controllers\API\V1\PositionController;
 use App\Http\Controllers\API\V1\RequestFormController;
 use App\Http\Controllers\API\V1\SupplierController;
-use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
-Route::get('/user', function (Request $request) {
-    return $request->user();
-})->middleware('auth:sanctum');
+// Route::get('/user', function (Request $request) {
+//     return $request->user();
+// })->middleware('auth:sanctum');
 
 Route::prefix('v1')->middleware('throttle:60,1')->group(function () {
     // Health check endpoint
@@ -34,6 +34,12 @@ Route::prefix('v1')->middleware('throttle:60,1')->group(function () {
     Route::get('/positions', [PositionController::class, 'index']);
     Route::post('/register', [RegisterController::class, 'register'])->middleware('throttle:10,1');
     Route::post('/login', [LoginController::class, 'login'])->middleware('throttle:10,1');
+
+    // Feedback endpoints
+    Route::post(
+        '/send-feedback',
+        [FeedbackController::class, 'store'],
+    )->middleware('throttle:30,1');
 
     // Protected endpoints
     Route::middleware('auth:sanctum')->group(function () {
@@ -423,5 +429,11 @@ Route::prefix('v1')->middleware('throttle:60,1')->group(function () {
             [ProfilePasswordController::class, 'update'],
         )->middleware('throttle:20,1')
             ->name('profile.password.update');
+
+        // Feedback Viewing endpoint
+        Route::get(
+            '/admin/feedbacks',
+            [FeedbackController::class, 'index'],
+        )->name('admin.feedbacks.index');
     });
 });
