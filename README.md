@@ -21,6 +21,47 @@ Laravel is a web application framework with expressive, elegant syntax. We belie
 
 Laravel is accessible, powerful, and provides tools required for large, robust applications.
 
+## Notification email queue
+
+Workflow notifications are saved to the database during the request
+transaction. Email is queued separately and delivered only by a running queue
+worker. The HTTP/API process does not wait for SMTP delivery.
+
+Configure these values in the deployment environment. Keep real credentials
+out of source control; `MAIL_PASSWORD` must be a Gmail app password:
+
+```dotenv
+QUEUE_CONNECTION=database
+MAIL_MAILER=smtp
+MAIL_HOST=smtp.gmail.com
+MAIL_PORT=587
+MAIL_SCHEME=smtp
+MAIL_USERNAME=<your-gmail-account>
+MAIL_PASSWORD=<your-gmail-app-password>
+MAIL_FROM_ADDRESS=<your-sender-address>
+MAIL_FROM_NAME="${APP_NAME}"
+MAIL_TIMEOUT=30
+FRONTEND_URL=<your-frontend-base-url>
+```
+
+Port 587 uses the `smtp` scheme and upgrades with STARTTLS automatically.
+For implicit TLS on port 465, use the `smtps` scheme instead. The value
+`tls` is not a supported Symfony Mailer scheme.
+
+For local development, start a worker with:
+
+```sh
+php artisan queue:work --queue=notifications --sleep=3 --tries=3 --timeout=30
+```
+
+In production, run the worker under a process supervisor or service manager
+so it is restarted if it exits. After deployments, restart workers with
+`php artisan queue:restart`. Keep the job timeout below the queue connection's
+`retry_after` value (currently 90 seconds). Review failures with
+`php artisan queue:failed` and retry an inspected job with
+`php artisan queue:retry <id>`. Avoid `php artisan queue:flush`; it deletes all
+failed-job records.
+
 ## Learning Laravel
 
 Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.

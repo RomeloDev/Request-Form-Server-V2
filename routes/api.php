@@ -16,6 +16,7 @@ use App\Http\Controllers\API\V1\BankController;
 use App\Http\Controllers\API\V1\BranchController;
 use App\Http\Controllers\API\V1\DashboardController;
 use App\Http\Controllers\API\V1\FeedbackController;
+use App\Http\Controllers\API\V1\NotificationController;
 use App\Http\Controllers\API\V1\PositionController;
 use App\Http\Controllers\API\V1\RequestFormController;
 use App\Http\Controllers\API\V1\SupplierController;
@@ -435,5 +436,32 @@ Route::prefix('v1')->middleware('throttle:60,1')->group(function () {
             '/admin/feedbacks',
             [FeedbackController::class, 'index'],
         )->name('admin.feedbacks.index');
+
+        /*
+         * Authenticated notification read endpoints. Both are scoped to the
+         * authenticated user's own notifications; no identity selector is
+         * accepted.
+         */
+        Route::get(
+            '/notifications/unread-count',
+            [NotificationController::class, 'unreadCount'],
+        )->name('notifications.unread-count');
+        Route::get(
+            '/notifications',
+            [NotificationController::class, 'index'],
+        )->name('notifications.index');
+
+        /*
+         * Authenticated notification mutations. Ownership is resolved through
+         * the authenticated user's relationship, never a global UUID lookup.
+         */
+        Route::patch(
+            '/notifications/read-all',
+            [NotificationController::class, 'markAllAsRead'],
+        )->name('notifications.read-all');
+        Route::patch(
+            '/notifications/{notification}/read',
+            [NotificationController::class, 'markAsRead'],
+        )->name('notifications.read');
     });
 });

@@ -18,6 +18,10 @@ use Throwable;
 
 class RequestDecisionService
 {
+    public function __construct(
+        private readonly RequestWorkflowNotificationService $workflowNotifications,
+    ) {}
+
     public function decide(
         RequestForm $requestForm,
         User $approver,
@@ -60,6 +64,7 @@ class RequestDecisionService
                     }
 
                     $steps = $lockedRequest->approvalSteps()
+                        ->with('approver')
                         ->lockForUpdate()
                         ->get();
 
@@ -157,6 +162,9 @@ class RequestDecisionService
                         ]);
                     }
 
+                    /** @var RequestApprovalStep|null $nextPendingStep */
+                    $nextPendingStep = null;
+
                     if ($action === 'disapprove') {
                         /*
                          * Later approvers did not act. Mark their steps Skipped
@@ -176,17 +184,49 @@ class RequestDecisionService
                         $lockedRequest->status =
                             RequestStatus::Disapproved;
                     } else {
-                        $hasRemainingPendingStep = $steps->contains(
-                            fn (RequestApprovalStep $step): bool => $step->status ===
-                                ApprovalStepStatus::Pending,
-                        );
+                        $nextPendingStep = $steps
+                            ->filter(
+                                fn (RequestApprovalStep $step): bool => $step->status ===
+                                    ApprovalStepStatus::Pending,
+                            )
+                            ->sortBy('level')
+                            ->first();
 
-                        $lockedRequest->status = $hasRemainingPendingStep
+                        $lockedRequest->status = $nextPendingStep !== null
                             ? RequestStatus::Ongoing
                             : RequestStatus::Completed;
                     }
 
                     $lockedRequest->save();
+
+                    if ($action === 'disapprove') {
+                        $this->workflowNotifications->notifyDisapproved(
+                            $lockedRequest,
+                            $approver,
+                            $assignedStep,
+                        );
+                    } elseif ($nextPendingStep instanceof RequestApprovalStep) {
+                        $this->workflowNotifications->notifyApproved(
+                            $lockedRequest,
+                            $approver,
+                            $assignedStep,
+                        );
+                        $this->workflowNotifications->notifyNextApprover(
+                            $lockedRequest,
+                            $nextPendingStep,
+                        );
+                    } else {
+                        /*
+                         * Completion is the combined final-approval event.
+                         * Sending a second approval notification here would
+                         * duplicate the same user action in the inbox.
+                         */
+                        $this->workflowNotifications->notifyCompleted(
+                            $lockedRequest,
+                            $approver,
+                            $assignedStep,
+                        );
+                    }
 
                     return $lockedRequest->fresh([
                         'requester',

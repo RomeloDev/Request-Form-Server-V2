@@ -21,6 +21,7 @@ class CashDisbursementService
     public function __construct(
         private readonly RequestApprovalChainResolver $approvalChainResolver,
         private readonly RequestSubmissionWriter $writer,
+        private readonly RequestWorkflowNotificationService $workflowNotifications,
     ) {}
 
     /**
@@ -110,6 +111,10 @@ class CashDisbursementService
                         storedPaths: $storedPaths,
                     );
                 }
+
+                $this->workflowNotifications->notifyFirstApprover(
+                    $requestForm,
+                );
 
                 return $requestForm->load([
                     'requester',
@@ -385,6 +390,15 @@ class CashDisbursementService
                             ->whereKey($removedAttachmentIds)
                             ->delete();
                     }
+
+                    /*
+                     * The new chain is persisted and the request is Pending.
+                     * Notify only its first actionable approver, inside this
+                     * transaction so the notification cannot outlive a rollback.
+                     */
+                    $this->workflowNotifications->notifyFirstApprover(
+                        $lockedRequest,
+                    );
 
                     return $lockedRequest->refresh()->load([
                         'requester',

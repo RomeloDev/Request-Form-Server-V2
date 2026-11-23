@@ -554,6 +554,7 @@ class RequestFormController extends Controller
 
         $sharedCount = $service->share(
             requestForm: $requestForm,
+            sharer: $request->user(),
             userIds: $request->validated()['user_ids'],
         );
 

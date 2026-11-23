@@ -26,6 +26,7 @@ class CheckIssuanceService
     public function __construct(
         private readonly RequestApprovalChainResolver $approvalChainResolver,
         private readonly RequestSubmissionWriter $writer,
+        private readonly RequestWorkflowNotificationService $workflowNotifications,
     ) {}
 
     /**
@@ -143,6 +144,10 @@ class CheckIssuanceService
                 Bank::query()->firstOrCreate([
                     'name' => $bankName,
                 ]);
+
+                $this->workflowNotifications->notifyFirstApprover(
+                    $requestForm,
+                );
 
                 return $requestForm->load([
                     'requester',
@@ -399,6 +404,15 @@ class CheckIssuanceService
                     Bank::query()->firstOrCreate([
                         'name' => $bankName,
                     ]);
+
+                    /*
+                     * The new chain is persisted and the request is Pending.
+                     * Notify only its first actionable approver, inside this
+                     * transaction so the notification cannot outlive a rollback.
+                     */
+                    $this->workflowNotifications->notifyFirstApprover(
+                        $lockedRequest,
+                    );
 
                     return $lockedRequest
                         ->refresh()

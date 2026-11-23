@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Enums\RequestStatus;
 use App\Models\RequestForm;
 use App\Models\User;
+use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\DB;
@@ -16,6 +17,7 @@ class RequestSharingService
 {
     public function __construct(
         private readonly RequestShareCandidateService $candidateService,
+        private readonly RequestWorkflowNotificationService $workflowNotifications,
     ) {}
 
     /**
@@ -182,10 +184,11 @@ class RequestSharingService
      */
     public function share(
         RequestForm $requestForm,
+        User $sharer,
         array $userIds,
     ): int {
         return DB::transaction(
-            function () use ($requestForm, $userIds): int {
+            function () use ($requestForm, $sharer, $userIds): int {
                 /*
                  * Lock the request row so concurrent share attempts cannot
                  * both pass the completed-status and recipient checks.
@@ -193,6 +196,15 @@ class RequestSharingService
                 $lockedRequest = RequestForm::query()
                     ->lockForUpdate()
                     ->findOrFail($requestForm->getKey());
+
+                if (
+                    (int) $lockedRequest->requester_id
+                    !== (int) $sharer->getKey()
+                ) {
+                    throw new AuthorizationException(
+                        'You are not allowed to share this request.',
+                    );
+                }
 
                 if ($lockedRequest->status !== RequestStatus::Completed) {
                     throw new ConflictHttpException(
@@ -208,24 +220,34 @@ class RequestSharingService
                  * Reuse the candidate rules so the users that can be
                  * submitted always match the users the selector displayed.
                  */
-                $eligibleIds = $this->candidateService
+                $eligibleRecipients = $this->candidateService
                     ->eligibleQueryFor($lockedRequest)
                     ->whereKey($requestedIds)
-                    ->pluck('id')
-                    ->map(
-                        fn ($id): int => (int) $id
-                    )
-                    ->all();
+                    ->get();
 
-                if (count($eligibleIds) !== count($requestedIds)) {
+                if ($eligibleRecipients->count() !== count($requestedIds)) {
                     throw ValidationException::withMessages([
                         'user_ids' => 'One or more selected recipients are not eligible to receive this request.',
                     ]);
                 }
 
+                $eligibleIds = $eligibleRecipients
+                    ->map(
+                        fn (User $recipient): int => (int) $recipient->getKey()
+                    )
+                    ->all();
+
                 $lockedRequest->sharedRecipients()->attach(
                     $eligibleIds
                 );
+
+                foreach ($eligibleRecipients as $recipient) {
+                    $this->workflowNotifications->notifyShared(
+                        $lockedRequest,
+                        $sharer,
+                        $recipient,
+                    );
+                }
 
                 return count($eligibleIds);
             },

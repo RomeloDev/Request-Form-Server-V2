@@ -2,14 +2,24 @@
 
 namespace Tests\Feature\RequestForms;
 
+use App\Enums\NotificationKind;
+use App\Enums\RequestStatus;
 use App\Models\AvpStaffAssignment;
 use App\Models\Branch;
 use App\Models\RequestForm;
 use App\Models\User;
+use App\Notifications\RequestWorkflowMailNotification;
+use Illuminate\Contracts\Debug\ExceptionHandler;
+use Illuminate\Contracts\Notifications\Dispatcher;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Notifications\ChannelManager;
+use Illuminate\Notifications\SendQueuedNotifications;
+use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
 use Laravel\Sanctum\Sanctum;
+use RuntimeException;
 use Spatie\Permission\Models\Role;
 use Spatie\Permission\PermissionRegistrar;
 use Tests\Support\ProvidesUsableSignatures;
@@ -309,6 +319,130 @@ class StoreStockRequisitionTest extends TestCase
 
         $this->assertDatabaseCount('request_forms', 0);
         $this->assertDatabaseCount('request_items', 0);
+    }
+
+    public function test_request_creation_queues_mail_without_synchronous_delivery_and_isolates_mail_failure(): void
+    {
+        $branch = $this->branch('QUEUE');
+        $requester = $this->user($branch);
+        $approver = $this->user($branch, 'approver');
+
+        Queue::fake();
+        Sanctum::actingAs($requester);
+
+        $this->postJson(
+            '/api/v1/request-forms/stock-requisitions',
+            $this->validPayload([$approver->id]),
+        )->assertCreated();
+
+        $requestForm = RequestForm::query()->sole();
+        $this->assertSame(RequestStatus::Pending, $requestForm->status);
+        $this->assertDatabaseCount('notifications', 1);
+        Queue::assertPushedTimes(SendQueuedNotifications::class, 1);
+
+        $job = Queue::pushed(SendQueuedNotifications::class)->first();
+        $this->assertSame('notifications', $job->queue);
+        $this->assertSame(['mail'], $job->channels);
+        $this->assertTrue($job->afterCommit);
+        $this->assertTrue($job->shouldBeEncrypted);
+        $this->assertInstanceOf(
+            RequestWorkflowMailNotification::class,
+            $job->notification,
+        );
+        $this->assertSame(
+            NotificationKind::RequestActionRequired,
+            $job->notification->payload()->kind,
+        );
+        $this->assertTrue($job->notifiables->first()->is($approver));
+        $this->assertSame('array', config('mail.default'));
+        $this->assertCount(
+            0,
+            Mail::mailer()->getSymfonyTransport()->messages(),
+        );
+
+        $exception = new RuntimeException('Simulated queued mail failure.');
+        $channelManager = \Mockery::mock(ChannelManager::class);
+        $channelManager
+            ->shouldReceive('sendNow')
+            ->once()
+            ->andThrow($exception);
+
+        try {
+            $job->handle($channelManager);
+            $this->fail('Expected the queued mail delivery to fail.');
+        } catch (RuntimeException $failure) {
+            $this->assertSame($exception, $failure);
+        }
+
+        $this->assertDatabaseHas('request_forms', [
+            'id' => $requestForm->id,
+            'status' => RequestStatus::Pending->value,
+        ]);
+        $this->assertDatabaseCount('notifications', 1);
+    }
+
+    public function test_queue_dispatch_failure_after_commit_does_not_fail_request_or_delete_attachment(): void
+    {
+        Storage::fake('local');
+
+        $branch = $this->branch('QUEUE-FAILURE');
+        $requester = $this->user($branch);
+        $approver = $this->user($branch, 'approver');
+        $queueFailure = new RuntimeException(
+            'Simulated queue dispatch failure.',
+        );
+        $realDispatcher = app(Dispatcher::class);
+        $dispatcher = \Mockery::mock(Dispatcher::class);
+        $dispatcher
+            ->shouldReceive('sendNow')
+            ->once()
+            ->andReturnUsing(
+                fn ($notifiables, $notification, $channels) => $realDispatcher
+                    ->sendNow($notifiables, $notification, $channels),
+            );
+        $dispatcher
+            ->shouldReceive('send')
+            ->once()
+            ->andThrow($queueFailure);
+        $this->app->instance(Dispatcher::class, $dispatcher);
+
+        $handler = \Mockery::mock(ExceptionHandler::class);
+        $handler
+            ->shouldReceive('report')
+            ->once()
+            ->with($queueFailure);
+        $this->app->instance(ExceptionHandler::class, $handler);
+
+        Sanctum::actingAs($requester);
+        $payload = $this->validPayload([$approver->id]);
+        $payload['attachments'] = [
+            UploadedFile::fake()->create(
+                'committed-quotation.pdf',
+                100,
+                'application/pdf',
+            ),
+        ];
+
+        $this->post(
+            '/api/v1/request-forms/stock-requisitions',
+            $payload,
+            ['Accept' => 'application/json'],
+        )->assertCreated();
+
+        $requestForm = RequestForm::query()
+            ->with('attachments')
+            ->sole();
+        $attachment = $requestForm->attachments->sole();
+
+        $this->assertSame(RequestStatus::Pending, $requestForm->status);
+        $this->assertDatabaseCount('notifications', 1);
+        $this->assertDatabaseCount('jobs', 0);
+        $this->assertDatabaseHas('request_attachments', [
+            'id' => $attachment->id,
+            'request_form_id' => $requestForm->id,
+            'path' => $attachment->path,
+        ]);
+        Storage::disk('local')->assertExists($attachment->path);
     }
 
     public function test_approved_by_is_required_and_cannot_overlap_noted_by(): void

@@ -55,6 +55,19 @@ class StoreRequestShareRequest extends FormRequest
             'role' => ['prohibited'],
             'status' => ['prohibited'],
             'request_id' => ['prohibited'],
+            'request_form_id' => ['prohibited'],
+            'request_code' => ['prohibited'],
+            'form_type' => ['prohibited'],
+            'requester' => ['prohibited'],
+            'actor' => ['prohibited'],
+            'actor_id' => ['prohibited'],
+            'actor_name' => ['prohibited'],
+            'sharer' => ['prohibited'],
+            'sharer_id' => ['prohibited'],
+            'target' => ['prohibited'],
+            'title' => ['prohibited'],
+            'message' => ['prohibited'],
+            'url' => ['prohibited'],
         ];
     }
 

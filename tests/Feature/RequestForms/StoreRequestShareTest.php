@@ -70,6 +70,9 @@ class StoreRequestShareTest extends TestCase
             $this->shareUrl($requestForm),
             ['user_ids' => [$recipient->id]],
         )->assertForbidden();
+
+        $this->assertDatabaseCount('request_shares', 0);
+        $this->assertDatabaseCount('notifications', 0);
     }
 
     public function test_non_completed_request_receives_conflict(): void
@@ -97,6 +100,7 @@ class StoreRequestShareTest extends TestCase
             );
 
         $this->assertDatabaseCount('request_shares', 0);
+        $this->assertDatabaseCount('notifications', 0);
     }
 
     public function test_invalid_user_ids_are_rejected(): void
@@ -127,6 +131,7 @@ class StoreRequestShareTest extends TestCase
             ]);
 
         $this->assertDatabaseCount('request_shares', 0);
+        $this->assertDatabaseCount('notifications', 0);
     }
 
     public function test_duplicate_user_ids_are_rejected(): void
@@ -224,6 +229,19 @@ class StoreRequestShareTest extends TestCase
                 'role' => 'Admin',
                 'status' => RequestStatus::Completed->value,
                 'request_id' => $requestForm->id,
+                'request_form_id' => $requestForm->id,
+                'request_code' => $requestForm->request_code,
+                'form_type' => $requestForm->form_type->value,
+                'requester' => ['id' => $requester->id],
+                'actor' => ['id' => $requester->id],
+                'actor_id' => $requester->id,
+                'actor_name' => 'Forged Actor',
+                'sharer' => ['id' => $requester->id],
+                'sharer_id' => $requester->id,
+                'target' => 'my_request',
+                'title' => 'Forged title',
+                'message' => 'Forged message',
+                'url' => 'https://attacker.example/request',
             ],
         )
             ->assertUnprocessable()
@@ -234,9 +252,23 @@ class StoreRequestShareTest extends TestCase
                 'role',
                 'status',
                 'request_id',
+                'request_form_id',
+                'request_code',
+                'form_type',
+                'requester',
+                'actor',
+                'actor_id',
+                'actor_name',
+                'sharer',
+                'sharer_id',
+                'target',
+                'title',
+                'message',
+                'url',
             ]);
 
         $this->assertDatabaseCount('request_shares', 0);
+        $this->assertDatabaseCount('notifications', 0);
     }
 
     public function test_requester_admin_unverified_roleless_and_existing_recipients_are_rejected(): void
