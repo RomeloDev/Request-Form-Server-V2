@@ -8,6 +8,7 @@ use App\Notifications\RequestWorkflowMailNotification;
 use App\Support\NotificationPayload;
 use Illuminate\Contracts\Queue\ShouldBeEncrypted;
 use Illuminate\Contracts\Queue\ShouldQueue;
+use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\SendQueuedNotifications;
 use LogicException;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -107,11 +108,100 @@ class RequestWorkflowMailNotificationTest extends TestCase
 
         $this->assertSame($title, $mail->subject);
         $this->assertSame([
-            $message,
-            'Request code: REQ-000123',
-            'Form type: Purchase Order Requisition Slip',
-            "Status: {$status}",
-        ], $mail->introLines);
+            'html' => 'mail.notifications.request-workflow',
+            'text' => 'mail.notifications.request-workflow-text',
+        ], $mail->view);
+        $this->assertSame('SMCT Request Form', $mail->viewData['brandName']);
+        $this->assertSame(
+            resource_path('images/smct-logo.png'),
+            $mail->viewData['logoPath'],
+        );
+        $this->assertFileExists($mail->viewData['logoPath']);
+        $this->assertSame($title, $mail->viewData['notificationTitle']);
+        $this->assertSame($message, $mail->viewData['notificationMessage']);
+        $this->assertSame('REQ-000123', $mail->viewData['requestCode']);
+        $this->assertSame(
+            'Purchase Order Requisition Slip',
+            $mail->viewData['formType'],
+        );
+        $this->assertSame($status, $mail->viewData['status']);
+        $this->assertSame('View request', $mail->viewData['actionLabel']);
+    }
+
+    public function test_it_renders_request_form_system_branding_without_the_laravel_salutation(): void
+    {
+        config(['app.frontend_url' => 'https://frontend.example.test/']);
+
+        $mail = (new RequestWorkflowMailNotification(
+            $this->payload(
+                NotificationKind::RequestApproved,
+                NotificationTarget::MyRequest,
+                'Request approved: REQ-000123',
+                'Jane Doe approved your request REQ-000123.',
+                'Ongoing',
+            ),
+        ))->toMail(new stdClass);
+
+        $html = $this->renderHtml($mail);
+        $text = view($mail->view['text'], $mail->viewData)->render();
+        $mailerRenderedHtml = app('mailer')->render(
+            $mail->view,
+            $mail->viewData,
+        );
+
+        foreach ([$html, $text] as $rendered) {
+            $this->assertStringContainsString('SMCT Request Form', $rendered);
+            $this->assertStringContainsString(
+                'Request approved: REQ-000123',
+                $rendered,
+            );
+            $this->assertStringContainsString('REQ-000123', $rendered);
+            $this->assertStringContainsString(
+                'Purchase Order Requisition Slip',
+                $rendered,
+            );
+            $this->assertStringContainsString(
+                'https://frontend.example.test/request',
+                $rendered,
+            );
+            $this->assertStringNotContainsString('Regards,', $rendered);
+            $this->assertStringNotContainsString('Laravel', $rendered);
+        }
+
+        $this->assertStringContainsString('cid:smct-logo.png', $html);
+        $this->assertStringContainsString('#162f65', $html);
+        $this->assertStringContainsString(
+            'data:image/png;base64,',
+            $mailerRenderedHtml,
+        );
+    }
+
+    public function test_the_branded_html_view_escapes_notification_content(): void
+    {
+        config(['app.frontend_url' => 'https://frontend.example.test/']);
+
+        $mail = (new RequestWorkflowMailNotification(
+            $this->payload(
+                NotificationKind::RequestApproved,
+                NotificationTarget::MyRequest,
+                '<script>alert("title")</script>',
+                '<img src=x onerror=alert("message")>',
+                'Ongoing',
+            ),
+        ))->toMail(new stdClass);
+
+        $html = $this->renderHtml($mail);
+
+        $this->assertStringNotContainsString('<script>', $html);
+        $this->assertStringNotContainsString('<img src=x', $html);
+        $this->assertStringContainsString(
+            '&lt;script&gt;alert(&quot;title&quot;)&lt;/script&gt;',
+            $html,
+        );
+        $this->assertStringContainsString(
+            '&lt;img src=x onerror=alert(&quot;message&quot;)&gt;',
+            $html,
+        );
     }
 
     public static function workflowPayloads(): array
@@ -290,5 +380,21 @@ class RequestWorkflowMailNotificationTest extends TestCase
                 : 'approved_by',
             actorName: 'Jane Doe',
         );
+    }
+
+    private function renderHtml(MailMessage $mail): string
+    {
+        $message = new class
+        {
+            public function embed(string $path): string
+            {
+                return 'cid:'.basename($path);
+            }
+        };
+
+        return view(
+            $mail->view['html'],
+            [...$mail->viewData, 'message' => $message],
+        )->render();
     }
 }

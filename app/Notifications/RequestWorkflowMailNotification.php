@@ -75,13 +75,24 @@ final class RequestWorkflowMailNotification extends Notification implements Shou
             NotificationTarget::SharedRequest => '/shared-requests',
         };
 
+        $actionUrl = rtrim($frontendUrl, '/').$path;
+        $viewData = [
+            'brandName' => 'SMCT Request Form',
+            'logoPath' => resource_path('images/smct-logo.png'),
+            'notificationTitle' => $this->payload->title,
+            'notificationMessage' => $this->payload->message,
+            'requestCode' => $this->payload->requestCode,
+            'formType' => $this->payload->formType,
+            'status' => $status,
+            'actionLabel' => 'View request',
+            'actionUrl' => $actionUrl,
+        ];
+
         return (new MailMessage)
             ->subject($this->payload->title)
-            ->line($this->payload->message)
-            ->line("Request code: {$this->payload->requestCode}")
-            ->line("Form type: {$this->payload->formType}")
-            ->line("Status: {$status}")
-            ->action('View request', rtrim($frontendUrl, '/').$path);
+            ->action($viewData['actionLabel'], $actionUrl)
+            ->view('mail.notifications.request-workflow', $viewData)
+            ->text('mail.notifications.request-workflow-text', $viewData);
     }
 
     public function payload(): NotificationPayload
