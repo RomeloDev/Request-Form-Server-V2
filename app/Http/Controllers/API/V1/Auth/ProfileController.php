@@ -50,38 +50,28 @@ class ProfileController extends Controller
         ]);
     }
 
-    public function showPicture(Request $request): StreamedResponse
-    {
+    public function showPicture(
+        Request $request,
+        ProfilePictureService $service,
+    ): StreamedResponse {
         $user = $request->user();
 
         Gate::authorize('viewProfile', $user);
 
-        $profilePicture = $user->profile_picture;
-        $disk = Storage::disk('local');
+        $profilePicture = is_string($user->profile_picture)
+            ? $user->profile_picture
+            : null;
+        $located = $service->locate($profilePicture);
 
-        if (
-            ! is_string($profilePicture)
-            || $profilePicture === ''
-            || ! $disk->exists($profilePicture)
-        ) {
+        if ($located === null) {
             abort(404, 'Profile picture not found.');
         }
 
-        $mimeType = $disk->mimeType($profilePicture);
-        $extensionsByMimeType = [
-            'image/jpeg' => 'jpg',
-            'image/png' => 'png',
-        ];
-
-        if (! is_string($mimeType) || ! isset($extensionsByMimeType[$mimeType])) {
-            abort(404, 'Profile picture not found.');
-        }
-
-        return $disk->response(
-            $profilePicture,
-            'profile-picture.'.$extensionsByMimeType[$mimeType],
+        return Storage::disk($located['disk'])->response(
+            $located['path'],
+            'profile-picture.'.$located['extension'],
             [
-                'Content-Type' => $mimeType,
+                'Content-Type' => $located['mime_type'],
                 'Cache-Control' => 'private, no-store',
                 'X-Content-Type-Options' => 'nosniff',
             ],

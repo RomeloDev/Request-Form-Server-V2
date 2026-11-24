@@ -5,6 +5,7 @@ namespace App\Http\Requests\Feedback;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 
 class StoreFeedbackRequest extends FormRequest
 {
@@ -35,7 +36,7 @@ class StoreFeedbackRequest extends FormRequest
                 'required',
                 'string',
                 'min:2',
-                'max:255'
+                'max:255',
             ],
             'email' => [
                 'required',
@@ -56,10 +57,17 @@ class StoreFeedbackRequest extends FormRequest
                 'required',
                 'string',
                 'max:255',
+                Rule::in([
+                    'suggestion',
+                    'complaint',
+                    'compliment',
+                    'other',
+                ]),
             ],
             'other_opinion' => [
                 'nullable',
                 'required_if:opinion,other',
+                'prohibited_unless:opinion,other',
                 'string',
                 'min:2',
                 'max:255',
@@ -68,8 +76,13 @@ class StoreFeedbackRequest extends FormRequest
                 'required',
                 'string',
                 'min:2',
-                'max:2000'
-            ]
+                'max:2000',
+            ],
+
+            'id' => ['prohibited'],
+            'feedback_code' => ['prohibited'],
+            'created_at' => ['prohibited'],
+            'updated_at' => ['prohibited'],
         ];
     }
 }

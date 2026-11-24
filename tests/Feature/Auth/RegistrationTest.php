@@ -106,6 +106,111 @@ class RegistrationTest extends TestCase
         );
     }
 
+    public function test_registration_normalizes_login_fields(): void
+    {
+        Storage::fake('local');
+
+        $branch = $this->branch();
+        $position = Position::query()->create([
+            'label' => 'Employee',
+            'value' => 'Employee',
+        ]);
+        $payload = $this->validPayload(
+            branchCode: $branch->branch_code,
+            position: $position->value,
+        );
+        $payload['email'] = '  NEW.EMPLOYEE@EXAMPLE.TEST  ';
+        $payload['userName'] = '  NEW_EMPLOYEE  ';
+
+        $this->post(
+            '/api/v1/register',
+            $payload,
+            ['Accept' => 'application/json'],
+        )->assertOk();
+
+        $this->assertDatabaseHas('users', [
+            'email' => 'new.employee@example.test',
+            'userName' => 'new_employee',
+        ]);
+    }
+
+    public function test_registration_rejects_server_owned_account_fields(): void
+    {
+        Storage::fake('local');
+
+        $branch = $this->branch();
+        $position = Position::query()->create([
+            'label' => 'Employee',
+            'value' => 'Employee',
+        ]);
+        $payload = [
+            ...$this->validPayload(
+                branchCode: $branch->branch_code,
+                position: $position->value,
+            ),
+            'id' => 99,
+            'name' => 'Forged Name',
+            'role' => 'Admin',
+            'roles' => ['Admin'],
+            'user_id' => 99,
+            'email_verified_at' => now()->toISOString(),
+            'remember_token' => 'forged-token',
+            'profile_picture' => 'profile-pictures/forged.png',
+            'created_at' => now()->toISOString(),
+            'updated_at' => now()->toISOString(),
+        ];
+
+        $this->post(
+            '/api/v1/register',
+            $payload,
+            ['Accept' => 'application/json'],
+        )
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors([
+                'id',
+                'name',
+                'role',
+                'roles',
+                'user_id',
+                'email_verified_at',
+                'remember_token',
+                'profile_picture',
+                'created_at',
+                'updated_at',
+            ]);
+
+        $this->assertDatabaseCount('users', 0);
+        $this->assertSame([], Storage::disk('local')->allFiles());
+    }
+
+    public function test_registration_rejects_invalid_contact_and_password_types(): void
+    {
+        Storage::fake('local');
+
+        $branch = $this->branch();
+        $position = Position::query()->create([
+            'label' => 'Employee',
+            'value' => 'Employee',
+        ]);
+        $payload = $this->validPayload(
+            branchCode: $branch->branch_code,
+            position: $position->value,
+        );
+        $payload['contact'] = 'not-a-phone';
+        $payload['password'] = array_fill(0, 8, 'password');
+
+        $this->post(
+            '/api/v1/register',
+            $payload,
+            ['Accept' => 'application/json'],
+        )
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['contact', 'password']);
+
+        $this->assertDatabaseCount('users', 0);
+        $this->assertSame([], Storage::disk('local')->allFiles());
+    }
+
     private function branch(): Branch
     {
         return Branch::factory()->create([

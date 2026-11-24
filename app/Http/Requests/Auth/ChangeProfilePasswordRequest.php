@@ -29,6 +29,7 @@ class ChangeProfilePasswordRequest extends FormRequest
             'current_password' => [
                 'required',
                 'string',
+                'max:255',
                 'current_password:web',
             ],
             'new_password' => [
@@ -42,8 +43,12 @@ class ChangeProfilePasswordRequest extends FormRequest
 
             // Reject alternative or server-owned fields.
             'password' => ['prohibited'],
+            'id' => ['prohibited'],
             'user_id' => ['prohibited'],
             'role' => ['prohibited'],
+            'email' => ['prohibited'],
+            'email_verified_at' => ['prohibited'],
+            'remember_token' => ['prohibited'],
         ];
     }
 }

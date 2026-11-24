@@ -36,7 +36,7 @@ Route::prefix('v1')->middleware('throttle:60,1')->group(function () {
     Route::post('/register', [RegisterController::class, 'register'])->middleware('throttle:10,1');
     Route::post('/login', [LoginController::class, 'login'])->middleware('throttle:10,1');
 
-    // Feedback endpoints
+    // Feedback endpoint
     Route::post(
         '/send-feedback',
         [FeedbackController::class, 'store'],

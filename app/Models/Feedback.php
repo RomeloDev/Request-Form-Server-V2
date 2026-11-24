@@ -13,7 +13,6 @@ use Illuminate\Database\Eloquent\Model;
     'opinion',
     'other_opinion',
     'message',
-    'feedback_code',
 ])]
 class Feedback extends Model
 {

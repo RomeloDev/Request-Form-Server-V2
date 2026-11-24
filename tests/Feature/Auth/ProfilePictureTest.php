@@ -25,6 +25,7 @@ class ProfilePictureTest extends TestCase
         parent::setUp();
 
         Storage::fake('local');
+        Storage::fake('public');
         app(PermissionRegistrar::class)->forgetCachedPermissions();
 
         foreach (['Admin', 'User', 'approver'] as $role) {
@@ -269,6 +270,37 @@ class ProfilePictureTest extends TestCase
             'profile_picture' => 'profile-pictures/unsupported.svg',
         ])->save();
         $this->get(self::ENDPOINT)->assertNotFound();
+    }
+
+    public function test_picture_reader_rejects_an_image_outside_allowlisted_directories(): void
+    {
+        $file = UploadedFile::fake()->image('private.png');
+        Storage::disk('local')->put(
+            'signatures/private.png',
+            $file->getContent(),
+        );
+        $user = $this->user('User', [
+            'profile_picture' => 'signatures/private.png',
+        ]);
+        Sanctum::actingAs($user);
+
+        $this->getJson(self::ENDPOINT)->assertNotFound();
+    }
+
+    public function test_picture_reader_supports_a_valid_legacy_public_picture(): void
+    {
+        $file = UploadedFile::fake()->image('legacy.jpg');
+        $path = 'request_form_profile_pictures/legacy.jpg';
+        Storage::disk('public')->put($path, $file->getContent());
+        $user = $this->user('User', ['profile_picture' => $path]);
+        Sanctum::actingAs($user);
+
+        $response = $this->get(self::ENDPOINT);
+
+        $response
+            ->assertOk()
+            ->assertHeader('Content-Type', 'image/jpeg');
+        $this->assertSame($file->getContent(), $response->streamedContent());
     }
 
     public function test_delete_removes_only_the_authenticated_users_picture(): void

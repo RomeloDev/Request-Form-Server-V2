@@ -166,14 +166,22 @@ class ChangeProfilePasswordTest extends TestCase
         $this->putJson(self::ENDPOINT, [
             ...$this->payload(),
             'password' => 'forged-password',
+            'id' => $otherUser->id,
             'user_id' => $otherUser->id,
             'role' => 'Admin',
+            'email' => 'forged@example.test',
+            'email_verified_at' => now()->toISOString(),
+            'remember_token' => 'forged-token',
         ])
             ->assertUnprocessable()
             ->assertJsonValidationErrors([
                 'password',
+                'id',
                 'user_id',
                 'role',
+                'email',
+                'email_verified_at',
+                'remember_token',
             ]);
 
         $this->assertSame($oldHash, $user->fresh()->password);
@@ -236,7 +244,7 @@ class ChangeProfilePasswordTest extends TestCase
         $this->postJson('/api/v1/login', [
             'email' => $user->email,
             'password' => self::CURRENT_PASSWORD,
-        ])->assertStatus(400);
+        ])->assertUnauthorized();
 
         $this->postJson('/api/v1/login', [
             'email' => $user->email,
@@ -245,6 +253,25 @@ class ChangeProfilePasswordTest extends TestCase
             ->assertOk()
             ->assertJsonPath('status', true)
             ->assertJsonPath('role', 'User');
+    }
+
+    public function test_successful_change_revokes_personal_access_tokens(): void
+    {
+        $user = $this->user('User');
+        $token = $user->createToken('compromised-device');
+        $this->actingAs($user, 'web');
+
+        $this->assertDatabaseHas('personal_access_tokens', [
+            'id' => $token->accessToken->id,
+            'tokenable_id' => $user->id,
+        ]);
+
+        $this->putJson(self::ENDPOINT, $this->payload())
+            ->assertOk();
+
+        $this->assertDatabaseMissing('personal_access_tokens', [
+            'id' => $token->accessToken->id,
+        ]);
     }
 
     public function test_route_uses_the_dedicated_controller_and_strict_throttle(): void

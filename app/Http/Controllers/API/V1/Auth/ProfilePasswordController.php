@@ -5,6 +5,7 @@ namespace App\Http\Controllers\API\V1\Auth;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Auth\ChangeProfilePasswordRequest;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\DB;
 
 class ProfilePasswordController extends Controller
 {
@@ -13,12 +14,17 @@ class ProfilePasswordController extends Controller
         $user = $request->user();
         $data = $request->validated();
 
-        $user->forceFill([
-            'password' => $data['new_password'],
-        ])->save();
+        DB::transaction(function () use ($data, $user): void {
+            $user->forceFill([
+                'password' => $data['new_password'],
+            ])->saveOrFail();
+
+            // A password change invalidates every personal access token.
+            $user->tokens()->delete();
+        });
 
         if ($request->hasSession()) {
-            $request->session()->regenerate();
+            $request->session()->regenerate(true);
         }
 
         return response()->json([
