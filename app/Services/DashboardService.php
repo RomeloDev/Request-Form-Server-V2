@@ -4,8 +4,13 @@ namespace App\Services;
 
 use App\Enums\ApprovalStepStatus;
 use App\Enums\RequestStatus;
+use App\Models\AvpStaffAssignment;
+use App\Models\Branch;
+use App\Models\BranchHeadAssignment;
+use App\Models\Feedback;
 use App\Models\RequestApprovalStep;
 use App\Models\RequestForm;
+use App\Models\Position;
 use App\Models\User;
 use Carbon\CarbonInterface;
 
@@ -37,7 +42,12 @@ class DashboardService
      *                 total: int
      *             }>
      *         }
-     *     }|null
+     *     }|null,
+    *      administration: array{
+    *          summary: array<string, int>,
+    *           request_summary: array<string, int>,
+    *          recent_requests: array<int, RequestForm>
+    *       }|null
      * }
      */
     public function forUser(User $user): array
@@ -45,7 +55,130 @@ class DashboardService
         return [
             'personal' => $this->personalOverview($user),
             'approval' => $this->approvalOverview($user),
+            'administration' => $this->administrationOverview($user),
         ];
+    }
+
+    public function administrationOverview(User $user): ?array
+    {
+        if (! $user->hasRole('Admin')) {
+            return null;
+        }
+
+        $nonAdminUsers = User::query()->withoutRole('Admin');
+
+        return [
+            'summary' => [
+                'total_users' => (clone $nonAdminUsers)->count(),
+
+                'verified_users' => (clone $nonAdminUsers)
+                    ->whereNotNull('email_verified_at')
+                    ->count(),
+
+                'unverified_users' => (clone $nonAdminUsers)
+                    ->whereNull('email_verified_at')
+                    ->count(),
+
+                'branches' => Branch::query()->count(),
+
+
+
+                'positions' => Position::query()->count(),
+
+                'approvers' => User::query()
+                    ->role('approver')
+                    ->count(),
+
+                'avp_staff_assignments' =>
+                    AvpStaffAssignment::query()->count(),
+
+                'branch_head_assignments' =>
+                    BranchHeadAssignment::query()->count(),
+
+                'feedbacks' => Feedback::query()->count(),
+            ],
+
+            'request_summary' => $this->administrationRequestSummary(),
+
+            'recent_requests' => $this->administrationRecentRequests(),
+        ];
+    }
+
+    /**
+     * Count all active request forms by status.
+     *
+     * RequestForm's SoftDeletes scope automatically excludes deleted requests.
+     *
+     * @return array{
+     *     total: int,
+     *     pending: int,
+     *     ongoing: int,
+     *     completed: int,
+     *     disapproved: int,
+     *     canceled: int
+     * }
+     */
+    public function administrationRequestSummary(): array
+    {
+        $summary = RequestForm::query()
+            ->selectRaw(
+                '
+                    COUNT(*) AS total,
+                    COALESCE(SUM(CASE WHEN status = ? THEN 1 ELSE 0 END), 0) AS pending,
+                    COALESCE(SUM(CASE WHEN status = ? THEN 1 ELSE 0 END), 0) AS ongoing,
+                    COALESCE(SUM(CASE WHEN status = ? THEN 1 ELSE 0 END), 0) AS completed,
+                    COALESCE(SUM(CASE WHEN status = ? THEN 1 ELSE 0 END), 0) AS disapproved,
+                    COALESCE(SUM(CASE WHEN status = ? THEN 1 ELSE 0 END), 0) AS canceled
+                ',
+                [
+                    RequestStatus::Pending->value,
+                    RequestStatus::Ongoing->value,
+                    RequestStatus::Completed->value,
+                    RequestStatus::Disapproved->value,
+                    RequestStatus::Canceled->value,
+                ],
+            )->first();
+
+        return [
+            'total' => (int) ($summary?->total ?? 0),
+            'pending' => (int) ($summary?->pending ?? 0),
+            'ongoing' => (int) ($summary?->ongoing ?? 0),
+            'completed' => (int) ($summary?->completed ?? 0),
+            'disapproved' => (int) ($summary?->disapproved ?? 0),
+            'canceled' => (int) ($summary?->canceled ?? 0),
+        ];
+    }
+
+    /**
+     * Load the five latest active requests for the Admin dashboard.
+     *
+     * Requester information and form contents are not selected.
+     *
+     * @return array<int, RequestForm>
+     */
+    public function administrationRecentRequests(): array
+    {
+        return RequestForm::query()
+            ->select([
+                'id',
+                'request_code',
+                'form_type',
+                'status',
+                'branch_id',
+                'created_at',
+            ])
+            ->with([
+                'branch' => fn ($query) => $query->select([
+                    'id',
+                    'branch_code',
+                    'branch_name',
+                ]),
+            ])
+            ->orderByDesc('created_at')
+            ->orderByDesc('id')
+            ->limit(5)
+            ->get()
+            ->all();
     }
 
     /**

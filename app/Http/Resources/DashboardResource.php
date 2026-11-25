@@ -26,6 +26,8 @@ class DashboardResource extends JsonResource
 
         $approval = $this->resource['approval'] ?? null;
 
+        $administration = $this->resource['administration'] ?? null;
+
         return [
             'personal' => [
                 'summary' => $this->personalSummary(
@@ -45,6 +47,46 @@ class DashboardResource extends JsonResource
                     ),
                 ]
                 : null,
+            'administration' => is_array($administration)
+                ? [
+                    'summary' => $this->administrationSummary(
+                        $administration['summary'] ?? null,
+                    ),
+                    'request_summary' => $this->personalSummary(
+                        $administration['request_summary'] ?? null,
+                    ),
+                    'recent_requests' => $this->recentRequests(
+                        $administration['recent_requests'] ?? null,
+                    ),
+                ] : null,
+        ];
+    }
+
+    /**
+     * Normalize and whitelist Admin dashboard counts.
+     *
+     * @return array<string, int>
+     */
+    private function administrationSummary(mixed $summary): array
+    {
+        $summary = is_array($summary) ? $summary : [];
+
+        return [
+            'total_users' => (int) ($summary['total_users'] ?? 0),
+            'verified_users' => (int) ($summary['verified_users'] ?? 0),
+            'unverified_users' => (int) (
+                $summary['unverified_users'] ?? 0
+            ),
+            'branches' => (int) ($summary['branches'] ?? 0),
+            'positions' => (int) ($summary['positions'] ?? 0),
+            'approvers' => (int) ($summary['approvers'] ?? 0),
+            'avp_staff_assignments' => (int) (
+                $summary['avp_staff_assignments'] ?? 0
+            ),
+            'branch_head_assignments' => (int) (
+                $summary['branch_head_assignments'] ?? 0
+            ),
+            'feedbacks' => (int) ($summary['feedbacks'] ?? 0),
         ];
     }
 

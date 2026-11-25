@@ -69,7 +69,34 @@ class ShowDashboardTest extends TestCase
         $response = $this->getJson(self::ENDPOINT);
 
         $this->assertDashboardContract($response);
-        $response->assertJsonPath('data.approval', null);
+        $response
+            ->assertJsonPath('data.approval', null)
+            ->assertJsonStructure([
+                'data' => [
+                    'administration' => [
+                        'summary' => [
+                            'total_users',
+                            'verified_users',
+                            'unverified_users',
+                            'branches',
+                            'positions',
+                            'approvers',
+                            'avp_staff_assignments',
+                            'branch_head_assignments',
+                            'feedbacks',
+                        ],
+                        'request_summary' => [
+                            'total',
+                            'pending',
+                            'ongoing',
+                            'completed',
+                            'disapproved',
+                            'canceled',
+                        ],
+                        'recent_requests',
+                    ],
+                ],
+            ]);
     }
 
     public function test_user_can_access_the_dashboard(): void
@@ -79,7 +106,9 @@ class ShowDashboardTest extends TestCase
         $response = $this->getJson(self::ENDPOINT);
 
         $this->assertDashboardContract($response);
-        $response->assertJsonPath('data.approval', null);
+        $response
+            ->assertJsonPath('data.approval', null)
+            ->assertJsonPath('data.administration', null);
     }
 
     public function test_approver_can_access_the_dashboard(): void
@@ -89,6 +118,8 @@ class ShowDashboardTest extends TestCase
         $response = $this->getJson(self::ENDPOINT);
 
         $this->assertDashboardContract($response);
+
+        $response->assertJsonPath('data.administration', null);
 
         $response
             ->assertJsonStructure([
@@ -160,7 +191,11 @@ class ShowDashboardTest extends TestCase
 
         $data = $payload['data'];
 
-        $this->assertKeysExactly($data, ['personal', 'approval'], 'data');
+        $this->assertKeysExactly(
+            $data,
+            ['personal', 'approval', 'administration'],
+            'data',
+        );
 
         $personal = $data['personal'];
 
@@ -183,6 +218,8 @@ class ShowDashboardTest extends TestCase
         );
 
         $approval = $data['approval'];
+
+        $this->assertNull($data['administration']);
 
         $this->assertKeysExactly(
             $approval,
@@ -330,6 +367,7 @@ class ShowDashboardTest extends TestCase
                         'recent_requests',
                     ],
                     'approval',
+                    'administration',
                 ],
                 'message',
             ])
