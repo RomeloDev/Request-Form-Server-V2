@@ -8,9 +8,9 @@ use App\Models\AvpStaffAssignment;
 use App\Models\Branch;
 use App\Models\BranchHeadAssignment;
 use App\Models\Feedback;
+use App\Models\Position;
 use App\Models\RequestApprovalStep;
 use App\Models\RequestForm;
-use App\Models\Position;
 use App\Models\User;
 use Carbon\CarbonInterface;
 
@@ -43,11 +43,11 @@ class DashboardService
      *             }>
      *         }
      *     }|null,
-    *      administration: array{
-    *          summary: array<string, int>,
-    *           request_summary: array<string, int>,
-    *          recent_requests: array<int, RequestForm>
-    *       }|null
+     *      administration: array{
+     *          summary: array<string, int>,
+     *           request_summary: array<string, int>,
+     *          recent_requests: array<int, RequestForm>
+     *       }|null
      * }
      */
     public function forUser(User $user): array
@@ -81,19 +81,15 @@ class DashboardService
 
                 'branches' => Branch::query()->count(),
 
-
-
                 'positions' => Position::query()->count(),
 
                 'approvers' => User::query()
                     ->role('approver')
                     ->count(),
 
-                'avp_staff_assignments' =>
-                    AvpStaffAssignment::query()->count(),
+                'avp_staff_assignments' => AvpStaffAssignment::query()->count(),
 
-                'branch_head_assignments' =>
-                    BranchHeadAssignment::query()->count(),
+                'branch_head_assignments' => BranchHeadAssignment::query()->count(),
 
                 'feedbacks' => Feedback::query()->count(),
             ],

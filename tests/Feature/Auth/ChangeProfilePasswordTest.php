@@ -286,7 +286,7 @@ class ChangeProfilePasswordTest extends TestCase
             $route->getActionName(),
         );
         $this->assertContains('auth:sanctum', $route->gatherMiddleware());
-        $this->assertContains('throttle:30,1', $route->gatherMiddleware());
+        $this->assertContains('throttle:40,1', $route->gatherMiddleware());
     }
 
     /** @return array<string, string> */
