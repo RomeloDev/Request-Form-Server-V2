@@ -8,6 +8,7 @@ use App\Http\Controllers\API\V1\Admin\PositionController as AdminPositionControl
 use App\Http\Controllers\API\V1\Admin\RequestReportController;
 use App\Http\Controllers\API\V1\Admin\UserController;
 use App\Http\Controllers\API\V1\Auth\LoginController;
+use App\Http\Controllers\API\V1\Auth\PasswordResetController;
 use App\Http\Controllers\API\V1\Auth\ProfileController;
 use App\Http\Controllers\API\V1\Auth\ProfilePasswordController;
 use App\Http\Controllers\API\V1\Auth\ProfileSignatureController;
@@ -35,6 +36,10 @@ Route::prefix('v1')->middleware('throttle:60,1')->group(function () {
     Route::get('/positions', [PositionController::class, 'index']);
     Route::post('/register', [RegisterController::class, 'register'])->middleware('throttle:10,1');
     Route::post('/login', [LoginController::class, 'login'])->middleware('throttle:10,1');
+    Route::post('/forgot-password', [PasswordResetController::class, 'sendLink'])
+        ->middleware('throttle:5,1,forgot-password');
+    Route::post('/reset-password', [PasswordResetController::class, 'reset'])
+        ->middleware('throttle:10,1,reset-password');
 
     // Feedback endpoint
     Route::post(
