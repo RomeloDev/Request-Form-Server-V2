@@ -37,9 +37,9 @@ Route::prefix('v1')->middleware('throttle:60,1')->group(function () {
     Route::post('/register', [RegisterController::class, 'register'])->middleware('throttle:10,1');
     Route::post('/login', [LoginController::class, 'login'])->middleware('throttle:10,1');
     Route::post('/forgot-password', [PasswordResetController::class, 'sendLink'])
-        ->middleware('throttle:5,1,forgot-password');
+        ->middleware('throttle:20,1,forgot-password');
     Route::post('/reset-password', [PasswordResetController::class, 'reset'])
-        ->middleware('throttle:10,1,reset-password');
+        ->middleware('throttle:20,1,reset-password');
 
     // Feedback endpoint
     Route::post(
@@ -63,10 +63,8 @@ Route::prefix('v1')->middleware('throttle:60,1')->group(function () {
         Route::prefix('admin/users')->name('admin.users.')->group(function () {
             Route::get('/', [UserController::class, 'index'])->name('index');
             Route::post('/', [UserController::class, 'store'])
-                ->middleware('throttle:40,1')
                 ->name('store');
             Route::post('/bulk', [UserController::class, 'storeBulk'])
-                ->middleware('throttle:40,1')
                 ->name('bulk-store');
             Route::get('/{user}/profile-picture', [UserController::class, 'profilePicture'])
                 ->name('profile-picture.show');
@@ -214,17 +212,17 @@ Route::prefix('v1')->middleware('throttle:60,1')->group(function () {
         Route::post(
             '/request-forms/stock-requisitions',
             [RequestFormController::class, 'storeStockRequisition']
-        )->middleware(['throttle:40,1', 'signature.required'])
+        )->middleware(['throttle:50,1', 'signature.required'])
             ->name('request-forms.stock-requisitions.store');
         Route::post(
             '/request-forms/purchase-orders',
             [RequestFormController::class, 'storePurchaseOrder']
-        )->middleware(['throttle:40,1', 'signature.required'])
+        )->middleware(['throttle:50,1', 'signature.required'])
             ->name('request-forms.purchase-orders.store');
         Route::post(
             '/request-forms/cash-disbursements',
             [RequestFormController::class, 'storeCashDisbursement']
-        )->middleware(['throttle:40,1', 'signature.required'])
+        )->middleware(['throttle:50,1', 'signature.required'])
             ->name('request-forms.cash-disbursements.store');
         Route::get('/request-forms', [RequestFormController::class, 'index'])->name('request-forms.index');
         Route::get('/request-forms/{requestForm}', [RequestFormController::class, 'show'])->missing(
@@ -281,7 +279,7 @@ Route::prefix('v1')->middleware('throttle:60,1')->group(function () {
         Route::patch(
             '/request-forms/{requestForm}/stock-requisition',
             [RequestFormController::class, 'updateStockRequisition'],
-        )->middleware(['throttle:40,1', 'signature.required'])
+        )->middleware(['throttle:50,1', 'signature.required'])
             ->missing(
                 fn () => response()->json([
                     'message' => 'Request not found.',
@@ -299,7 +297,7 @@ Route::prefix('v1')->middleware('throttle:60,1')->group(function () {
         Route::patch(
             '/request-forms/{requestForm}/cash-disbursement',
             [RequestFormController::class, 'updateCashDisbursement'],
-        )->middleware(['throttle:40,1', 'signature.required'])
+        )->middleware(['throttle:50,1', 'signature.required'])
             ->missing(
                 fn () => response()->json([
                     'message' => 'Request not found.',
@@ -308,7 +306,7 @@ Route::prefix('v1')->middleware('throttle:60,1')->group(function () {
         Route::patch(
             '/request-forms/{requestForm}/check-issuance',
             [RequestFormController::class, 'updateCheckIssuance'],
-        )->middleware(['throttle:40,1', 'signature.required'])
+        )->middleware(['throttle:50,1', 'signature.required'])
             ->missing(
                 fn () => response()->json([
                     'message' => 'Request not found.',
@@ -319,7 +317,7 @@ Route::prefix('v1')->middleware('throttle:60,1')->group(function () {
             '/request-forms/{requestForm}',
             [RequestFormController::class, 'destroy'],
         )
-            ->middleware('throttle:40,1')
+            ->middleware('throttle:50,1')
             ->missing(
                 fn () => response()->json([
                     'message' => 'Request not found.',
@@ -381,7 +379,7 @@ Route::prefix('v1')->middleware('throttle:60,1')->group(function () {
         Route::post(
             '/request-forms/check-issuances',
             [RequestFormController::class, 'storeCheckIssuance'],
-        )->middleware(['throttle:40,1', 'signature.required'])
+        )->middleware(['throttle:50,1', 'signature.required'])
             ->name('request-forms.check-issuances.store');
 
         // Admin Reports endpoint
@@ -409,13 +407,11 @@ Route::prefix('v1')->middleware('throttle:60,1')->group(function () {
         Route::post(
             '/profile/picture',
             [ProfileController::class, 'updatePicture'],
-        )->middleware('throttle:40,1')
-            ->name('profile.picture.update');
+        )->name('profile.picture.update');
         Route::delete(
             '/profile/picture',
             [ProfileController::class, 'destroyPicture'],
-        )->middleware('throttle:40,1')
-            ->name('profile.picture.destroy');
+        )->name('profile.picture.destroy');
         Route::get(
             '/profile/signature',
             [ProfileSignatureController::class, 'show'],
@@ -423,18 +419,15 @@ Route::prefix('v1')->middleware('throttle:60,1')->group(function () {
         Route::post(
             '/profile/signature',
             [ProfileSignatureController::class, 'update'],
-        )->middleware('throttle:40,1')
-            ->name('profile.signature.update');
+        )->name('profile.signature.update');
         Route::delete(
             '/profile/signature',
             [ProfileSignatureController::class, 'destroy'],
-        )->middleware('throttle:40,1')
-            ->name('profile.signature.destroy');
+        )->name('profile.signature.destroy');
         Route::put(
             '/profile/password',
             [ProfilePasswordController::class, 'update'],
-        )->middleware('throttle:40,1')
-            ->name('profile.password.update');
+        )->name('profile.password.update');
 
         // Feedback Viewing endpoint
         Route::get(
