@@ -80,11 +80,11 @@ class PasswordResetTest extends TestCase
             ]);
     }
 
-    public function test_forgot_password_route_blocks_the_sixth_request(): void
+    public function test_forgot_password_route_blocks_the_twenty_oneth_request(): void
     {
         $this->withServerVariables(['REMOTE_ADDR' => '203.0.113.50']);
 
-        for ($attempt = 1; $attempt <= 5; $attempt++) {
+        for ($attempt = 1; $attempt <= 20; $attempt++) {
             $this->postJson(self::FORGOT_ENDPOINT, [
                 'email' => "missing-{$attempt}@example.test",
             ])->assertOk();
@@ -181,8 +181,8 @@ class PasswordResetTest extends TestCase
         $routes = collect(Route::getRoutes()->getRoutes());
 
         foreach ([
-            'api/v1/forgot-password' => 'throttle:5,1,forgot-password',
-            'api/v1/reset-password' => 'throttle:10,1,reset-password',
+            'api/v1/forgot-password' => 'throttle:20,1,forgot-password',
+            'api/v1/reset-password' => 'throttle:20,1,reset-password',
         ] as $uri => $throttle) {
             $route = $routes->first(fn ($route) => $route->uri() === $uri
                 && in_array('POST', $route->methods(), true));
