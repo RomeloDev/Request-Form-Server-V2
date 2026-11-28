@@ -19,10 +19,9 @@ return [
 
     'allowed_methods' => ['*'],
 
-    'allowed_origins' => [
+    'allowed_origins' => array_values(array_filter([
         env('FRONTEND_URL'),
-        'http://localhost:3001',
-    ],
+    ])),
 
     'allowed_origins_patterns' => [],
 
@@ -32,6 +31,6 @@ return [
 
     'max_age' => 0,
 
-    'supports_credentials' => false,
+    'supports_credentials' => true,
 
 ];
