@@ -23,6 +23,11 @@ return Application::configure(basePath: dirname(__DIR__))
                 | Request::HEADER_X_FORWARDED_PORT
                 | Request::HEADER_X_FORWARDED_PROTO,
         );
+
+        $middleware->redirectGuestsTo(
+            fn (Request $request): ?string => null,
+        );
+        
         $middleware->statefulApi();
         $middleware->alias([
             'role' => RoleMiddleware::class,
